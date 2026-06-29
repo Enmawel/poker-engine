@@ -2,6 +2,33 @@ const express = require('express');
 const app     = express();
 app.use(express.json());
 
+// --- API KEYS (simuladas por ahora) ---
+const apiKeys = {
+  'pk_facilitobet_x7k2m9q3': 'FacilitoBet',
+  'pk_betvenezuela_a1b2c3d4': 'BetVenezuela',
+  'pk_ganamax_z9y8x7w6':     'GanaMax'
+};
+
+// --- MIDDLEWARE DE AUTENTICACIÓN ---
+function autenticar(req, res, next) {
+  const key = req.headers['x-api-key'];
+
+  if (!key || !apiKeys[key]) {
+    return res.status(401).json({
+      error: 'API Key inválida o ausente',
+      mensaje: 'Incluye tu API Key en el header x-api-key'
+    });
+  }
+
+  req.cliente = apiKeys[key];
+  next();
+}
+
+// Proteger todas las rutas excepto /
+app.use('/partida', autenticar);
+app.use('/mano', autenticar);
+app.use('/mazo', autenticar);
+
 const { crearMazo, barajar, repartir, repartirTablero, determinarGanador, evaluarMano } = require('./motor');
 
 // Ruta: verificar que el servidor vive
