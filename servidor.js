@@ -2,6 +2,13 @@ const express = require('express');
 const app     = express();
 app.use(express.json());
 
+// --- SISTEMA DE LOGS ---
+function registrarLog(cliente, ruta, estado) {
+  const ahora = new Date();
+  const fecha = ahora.toISOString();
+  console.log(`[${fecha}] | Cliente: ${cliente} | Ruta: ${ruta} | Estado: ${estado}`);
+}
+
 // --- API KEYS (simuladas por ahora) ---
 const apiKeys = {
   'pk_facilitobet_x7k2m9q3': 'FacilitoBet',
@@ -46,6 +53,7 @@ app.post('/partida', (req, res) => {
   const cartasTablero = [...tablero.flop, tablero.turn, tablero.river];
   const resultado     = determinarGanador(manos, cartasTablero);
 
+  registrarLog(req.cliente, '/partida', 200);
   res.json({ tablero, resultado });
 });
 
@@ -58,14 +66,17 @@ app.post('/mano', (req, res) => {
       error: 'Se requieren cartasJugador y cartasTablero'
     });
   }
+ const resultado = evaluarMano(cartasJugador, cartasTablero);
 
-  const resultado = evaluarMano(cartasJugador, cartasTablero);
+  registrarLog(req.cliente, '/mano', 200);
   res.json({ resultado });
 });
 
 // Ruta: obtener un mazo barajado
 app.get('/mazo', (req, res) => {
   const mazo = barajar(crearMazo());
+  
+  registrarLog(req.cliente, '/mazo', 200);
   res.json({ mazo, total: mazo.length });
 });
 
