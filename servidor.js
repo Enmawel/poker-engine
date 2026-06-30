@@ -1,12 +1,22 @@
 const express = require('express');
 const app     = express();
 app.use(express.json());
+app.use(express.static('.'));
 
 // --- SISTEMA DE LOGS ---
+const logs = [];
+
 function registrarLog(cliente, ruta, estado) {
   const ahora = new Date();
-  const fecha = ahora.toISOString();
-  console.log(`[${fecha}] | Cliente: ${cliente} | Ruta: ${ruta} | Estado: ${estado}`);
+  const entrada = {
+    fecha: ahora.toISOString(),
+    cliente,
+    ruta,
+    estado
+  };
+
+  logs.push(entrada);
+  console.log(`[${entrada.fecha}] | Cliente: ${cliente} | Ruta: ${ruta} | Estado: ${estado}`);
 }
 
 // --- API KEYS (simuladas por ahora) ---
@@ -31,7 +41,7 @@ function autenticar(req, res, next) {
   next();
 }
 
-// Proteger todas las rutas excepto /
+// Proteger todas las rutas excepto / y /admin/logs
 app.use('/partida', autenticar);
 app.use('/mano', autenticar);
 app.use('/mazo', autenticar);
@@ -66,7 +76,8 @@ app.post('/mano', (req, res) => {
       error: 'Se requieren cartasJugador y cartasTablero'
     });
   }
- const resultado = evaluarMano(cartasJugador, cartasTablero);
+
+  const resultado = evaluarMano(cartasJugador, cartasTablero);
 
   registrarLog(req.cliente, '/mano', 200);
   res.json({ resultado });
@@ -75,9 +86,14 @@ app.post('/mano', (req, res) => {
 // Ruta: obtener un mazo barajado
 app.get('/mazo', (req, res) => {
   const mazo = barajar(crearMazo());
-  
+
   registrarLog(req.cliente, '/mazo', 200);
   res.json({ mazo, total: mazo.length });
+});
+
+// Ruta: ver todos los logs (para el panel admin)
+app.get('/admin/logs', (req, res) => {
+  res.json({ total: logs.length, logs });
 });
 
 const PORT = process.env.PORT || 3000;

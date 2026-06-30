@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Panel Admin - Poker Engine</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #0f1117;
+      color: #e4e4e7;
+      padding: 2rem;
+    }
+
+    h1 {
+      color: #22c55e;
+      margin-bottom: 0.5rem;
+    }
+
+    .subtitulo {
+      color: #71717a;
+      margin-bottom: 2rem;
+    }
+
+    .stats {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+
+    .stat-card {
+      background: #1a1d27;
+      border: 1px solid #2a2d3a;
+      border-radius: 12px;
+      padding: 1.5rem;
+      flex: 1;
+    }
+
+    .stat-card .numero {
+      font-size: 2rem;
+      font-weight: bold;
+      color: #22c55e;
+    }
+
+    .stat-card .label {
+      color: #71717a;
+      font-size: 0.9rem;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #1a1d27;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    th, td {
+      padding: 0.8rem 1rem;
+      text-align: left;
+      border-bottom: 1px solid #2a2d3a;
+    }
+
+    th {
+      background: #22272f;
+      color: #a1a1aa;
+      font-size: 0.85rem;
+      text-transform: uppercase;
+    }
+
+    .badge {
+      background: #22c55e22;
+      color: #22c55e;
+      padding: 0.2rem 0.6rem;
+      border-radius: 6px;
+      font-size: 0.85rem;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>🃏 Panel de Administración</h1>
+  <p class="subtitulo">Poker Engine — Actividad en tiempo real</p>
+
+  <div class="stats">
+    <div class="stat-card">
+      <div class="numero" id="totalPeticiones">0</div>
+      <div class="label">Peticiones totales</div>
+    </div>
+    <div class="stat-card">
+      <div class="numero" id="totalClientes">0</div>
+      <div class="label">Clientes activos</div>
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Fecha</th>
+        <th>Cliente</th>
+        <th>Ruta</th>
+        <th>Estado</th>
+      </tr>
+    </thead>
+    <tbody id="tablaLogs">
+    </tbody>
+  </table>
+
+  <script>
+    async function cargarLogs() {
+      const respuesta = await fetch('/admin/logs');
+      const data = await respuesta.json();
+
+      document.getElementById('totalPeticiones').textContent = data.total;
+
+      const clientesUnicos = new Set(data.logs.map(log => log.cliente));
+      document.getElementById('totalClientes').textContent = clientesUnicos.size;
+
+      const tabla = document.getElementById('tablaLogs');
+      tabla.innerHTML = '';
+
+      data.logs.slice().reverse().forEach(log => {
+        const fila = document.createElement('tr');
+        fila.innerHTML = `
+          <td>${new Date(log.fecha).toLocaleString()}</td>
+          <td>${log.cliente}</td>
+          <td>${log.ruta}</td>
+          <td><span class="badge">${log.estado}</span></td>
+        `;
+        tabla.appendChild(fila);
+      });
+    }
+
+    cargarLogs();
+    setInterval(cargarLogs, 3000);
+  </script>
+
+</body>
+</html>
