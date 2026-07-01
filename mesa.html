@@ -217,33 +217,60 @@
   }
 
   async function cargarPartida() {
-    try {
-      const respuesta = await fetch(`${API_URL}/partida`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': API_KEY
-        },
-        body: JSON.stringify({ jugadores: 3 })
-      });
+  try {
+    const respuesta = await fetch(`${API_URL}/partida`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': API_KEY
+      },
+      body: JSON.stringify({ jugadores: 3 })
+    });
 
-      const datos = await respuesta.json();
+    const datos = await respuesta.json();
 
-      // Combinamos: cartas comunitarias reales del servidor + resto de datos quemados
-      const estadoFinal = {
-        ...estadoBase,
-        cartasComunitarias: mapearCartasComunitarias(datos.tablero)
-      };
+    const totalAsientos = 9;
 
-      // Pintamos la mesa con el estado combinado
-      crearAsientos(9, estadoFinal);
-      actualizarPozo(estadoFinal.pozo);
-      renderCartasComunitarias(estadoFinal.cartasComunitarias);
+    // Asientos fijos para los demás jugadores (distribuidos arriba)
+    const asientosOtros = [6, 0, 4, 8, 1, 5, 7, 3]; // asiento 2 reservado para Tú
 
-    } catch (error) {
-      console.error('Error conectando con la API:', error);
-    }
+    const jugadoresMapeados = datos.jugadores.map((j, index) => {
+      if (index === 0) {
+        // Tú siempre en el asiento 2 (centro abajo)
+        return {
+          asiento: 2,
+          nombre: 'Tú',
+          fichas: j.fichas,
+          esTurno: true,
+          cartas: j.cartas
+        };
+      } else {
+        // Los demás se distribuyen en los asientos disponibles
+        return {
+          asiento: asientosOtros[index - 1],
+          nombre: `Jugador ${j.jugador}`,
+          fichas: j.fichas,
+          esTurno: false,
+          cartas: j.cartas
+        };
+      }
+    });
+
+    const estadoFinal = {
+      pozo: 0,
+      miAsiento: 2,
+      cartasComunitarias: mapearCartasComunitarias(datos.tablero),
+      jugadores: jugadoresMapeados
+    };
+
+    crearAsientos(totalAsientos, estadoFinal);
+    actualizarPozo(estadoFinal.pozo);
+    renderCartasComunitarias(estadoFinal.cartasComunitarias);
+
+  } catch (error) {
+    console.error('Error conectando con la API:', error);
   }
+}
 
   function crearCartaHTML(carta) {
     const esRoja = (carta.palo === '♥' || carta.palo === '♦');

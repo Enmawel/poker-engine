@@ -66,8 +66,15 @@ app.post('/partida', (req, res) => {
   const cartasTablero = [...tablero.flop, tablero.turn, tablero.river];
   const resultado     = determinarGanador(manos, cartasTablero);
 
+  // Construimos jugadores con sus cartas y datos básicos
+  const jugadores = manos.map((cartas, index) => ({
+    jugador: index + 1,
+    cartas: cartas,
+    fichas: 1000  // fichas iniciales por defecto
+  }));
+
   registrarLog(req.cliente, '/partida', 200);
-  res.json({ tablero, resultado });
+  res.json({ tablero, resultado, jugadores });
 });
 
 // Ruta: evaluar una mano específica
