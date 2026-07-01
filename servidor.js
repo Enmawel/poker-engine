@@ -9,6 +9,13 @@ app.use(express.static('.'));
 // --- SISTEMA DE LOGS ---
 const logs = [];
 
+// --- ESTADO DE PARTIDAS EN MEMORIA ---
+const partidas = {};
+
+function generarId() {
+  return Math.random().toString(36).substring(2, 9); // ej: "x7k2m9q"
+}
+
 function registrarLog(cliente, ruta, estado) {
   const ahora = new Date();
   const entrada = {
@@ -54,6 +61,110 @@ const { crearMazo, barajar, repartir, repartirTablero, determinarGanador, evalua
 // Ruta: verificar que el servidor vive
 app.get('/', (req, res) => {
   res.json({ mensaje: 'Motor de Poker funcionando 🃏' });
+});
+
+// Ruta: crear una nueva partida con estado persistente
+app.post('/partida/nueva', (req, res) => {
+  const numJugadores = req.body.jugadores || 3;
+  const apuestaMinima = 50;
+
+  const mazo = barajar(crearMazo());
+  const manos = repartir(mazo, numJugadores, 2);
+  const mazoRestante = mazo.slice(numJugadores * 2);
+  const tablero = repartirTablero(mazoRestante);
+
+  const jugadores = manos.map((cartas, index) => ({
+    id: index + 1,
+    cartas: cartas,
+    fichas: 1000,
+    apuestaActual: 0,
+    activo: true  // false cuando hace fold
+  }));
+
+  // Ciega pequeña y ciega grande automáticas
+  jugadores[0].fichas -= apuestaMinima / 2;
+  jugadores[0].apuestaActual = apuestaMinima / 2;
+  jugadores[1].fichas -= apuestaMinima;
+  jugadores[1].apuestaActual = apuestaMinima;
+
+  const id = generarId();
+
+  partidas[id] = {
+    id,
+    jugadores,
+    tablero,
+    pozo: apuestaMinima + apuestaMinima / 2,
+    turnoActual: 2 % numJugadores, // empieza el tercero (o el primero si solo hay 2)
+    fase: 'preflop',
+    apuestaMinima,
+    apuestaMaxima: apuestaMinima * 4
+  };
+
+  registrarLog(req.cliente, '/partida/nueva', 200);
+  res.json({
+    id,
+    estado: partidas[id]
+  });
+});
+
+// Ruta: ejecutar una acción en una partida existente
+app.post('/partida/:id/accion', (req, res) => {
+  const { id } = req.params;
+  const { accion, monto } = req.body; // accion: 'fold' | 'check' | 'bet'
+
+  const partida = partidas[id];
+
+  if (!partida) {
+    return res.status(404).json({ error: 'Partida no encontrada' });
+  }
+
+  const jugadorActual = partida.jugadores[partida.turnoActual];
+
+  // Procesamos la acción
+  if (accion === 'fold') {
+    jugadorActual.activo = false;
+
+  } else if (accion === 'check') {
+    // No hace nada, solo pasa el turno
+
+  } else if (accion === 'bet') {
+    const apuesta = monto || partida.apuestaMinima;
+    jugadorActual.fichas -= apuesta;
+    jugadorActual.apuestaActual += apuesta;
+    partida.pozo += apuesta;
+  }
+
+  // Pasamos al siguiente jugador activo
+  const jugadoresActivos = partida.jugadores.filter(j => j.activo);
+
+  if (jugadoresActivos.length === 1) {
+    // Solo queda un jugador — gana automáticamente
+    partida.fase = 'showdown';
+  } else {
+    // Buscamos el próximo jugador activo
+    let siguiente = (partida.turnoActual + 1) % partida.jugadores.length;
+    while (!partida.jugadores[siguiente].activo) {
+      siguiente = (siguiente + 1) % partida.jugadores.length;
+    }
+    partida.turnoActual = siguiente;
+
+    // Avanzamos de fase si todos los activos ya apostaron igual
+    const apuestaMax = Math.max(...partida.jugadores.map(j => j.apuestaActual));
+    const todosIgualaron = jugadoresActivos.every(j => j.apuestaActual === apuestaMax);
+
+    if (todosIgualaron) {
+      if (partida.fase === 'preflop') partida.fase = 'flop';
+      else if (partida.fase === 'flop') partida.fase = 'turn';
+      else if (partida.fase === 'turn') partida.fase = 'river';
+      else if (partida.fase === 'river') partida.fase = 'showdown';
+
+      // Reiniciamos apuestas de la ronda
+      partida.jugadores.forEach(j => j.apuestaActual = 0);
+    }
+  }
+
+  registrarLog(req.cliente, `/partida/${id}/accion`, 200);
+  res.json({ id, estado: partida });
 });
 
 // Ruta: jugar una partida completa
