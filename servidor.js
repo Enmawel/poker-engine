@@ -62,7 +62,8 @@ app.post('/partida', (req, res) => {
 
   const mazo          = barajar(crearMazo());
   const manos         = repartir(mazo, numJugadores, 2);
-  const tablero       = repartirTablero(mazo);
+  const mazoRestante  = mazo.slice(numJugadores * 2); // saltamos las cartas ya repartidas
+  const tablero       = repartirTablero(mazoRestante);
   const cartasTablero = [...tablero.flop, tablero.turn, tablero.river];
   const resultado     = determinarGanador(manos, cartasTablero);
 
