@@ -2,6 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
+  <script src="http://localhost:3000/socket.io/socket.io.js"></script>
   <title>Mesa de Poker</title>
   <style>
     body {
@@ -222,6 +223,17 @@
     const API_URL = 'http://localhost:3000';
     const API_KEY = 'pk_facilitobet_x7k2m9q3';
     const MI_JUGADOR_ID = 1;
+    // Conexión WebSocket
+   const socket = io(API_URL);
+
+   socket.on('connect', () => {
+   console.log('WebSocket conectado:', socket.id);
+});
+
+socket.on('estadoActualizado', (estado) => {
+  console.log('Estado actualizado por WebSocket');
+  renderEstado(estado);
+});
 
     let partidaId = null;
 
@@ -390,6 +402,7 @@
         });
         const datos = await respuesta.json();
         partidaId = datos.id;
+        socket.emit('unirse', partidaId);
         renderEstado(datos.estado);
       } catch (error) {
         console.error('Error cargando partida:', error);

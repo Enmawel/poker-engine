@@ -1,6 +1,13 @@
 const express = require('express');
 const cors = require('cors');
-const app     = express();
+const http = require('http');
+const { Server } = require('socket.io');
+
+const app = express();
+const servidor = http.createServer(app);
+const io = new Server(servidor, {
+  cors: { origin: '*' }
+});
 
 app.use(cors());
 app.use(express.json());
@@ -163,6 +170,7 @@ app.post('/partida/:id/accion', (req, res) => {
   }
 
   registrarLog(req.cliente, `/partida/${id}/accion`, 200);
+  io.to(id).emit('estadoActualizado', partida);
   res.json({ id, estado: partida });
 });
 
@@ -219,6 +227,19 @@ app.get('/admin/logs', (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 
-app.listen(PORT, () => {
+io.on('connection', (socket) => {
+  console.log('Cliente conectado por WebSocket:', socket.id);
+
+  socket.on('unirse', (partidaId) => {
+    socket.join(partidaId);
+    console.log(`Socket ${socket.id} se unió a partida ${partidaId}`);
+  });
+
+  socket.on('disconnect', () => {
+    console.log('Cliente desconectado:', socket.id);
+  });
+});
+
+servidor.listen(PORT, () => {
   console.log(`Servidor corriendo en el puerto ${PORT}`);
 });
