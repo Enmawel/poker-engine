@@ -222,18 +222,23 @@
   <script>
     const API_URL = 'http://localhost:3000';
     const API_KEY = 'pk_facilitobet_x7k2m9q3';
-    const MI_JUGADOR_ID = 1;
+
+    // Leemos los parámetros de la URL
+    const params = new URLSearchParams(window.location.search);
+    const MI_JUGADOR_ID = parseInt(params.get('jugadorId')) || 1;
+    const mesaIdParam = params.get('mesaId') || null;
+
     // Conexión WebSocket
-   const socket = io(API_URL);
+    const socket = io(API_URL);
 
-   socket.on('connect', () => {
-   console.log('WebSocket conectado:', socket.id);
-});
+    socket.on('connect', () => {
+      console.log('WebSocket conectado:', socket.id);
+    });
 
-socket.on('estadoActualizado', (estado) => {
-  console.log('Estado actualizado por WebSocket');
-  renderEstado(estado);
-});
+    socket.on('estadoActualizado', (estado) => {
+      console.log('Estado actualizado por WebSocket');
+      renderEstado(estado);
+    });
 
     let partidaId = null;
 
@@ -391,23 +396,38 @@ socket.on('estadoActualizado', (estado) => {
     }
 
     async function cargarPartida() {
-      try {
-        const respuesta = await fetch(`${API_URL}/partida/nueva`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': API_KEY
-          },
-          body: JSON.stringify({ jugadores: 3 })
-        });
-        const datos = await respuesta.json();
-        partidaId = datos.id;
-        socket.emit('unirse', partidaId);
-        renderEstado(datos.estado);
-      } catch (error) {
-        console.error('Error cargando partida:', error);
-      }
+  try {
+    let datos;
+
+    if (mesaIdParam) {
+      // Nos unimos a una partida existente
+      const respuesta = await fetch(`${API_URL}/partida/${mesaIdParam}`, {
+        method: 'GET',
+        headers: { 'x-api-key': API_KEY }
+      });
+      const json = await respuesta.json();
+      datos = { id: mesaIdParam, estado: json.estado };
+    } else {
+      // Creamos una partida nueva
+      const respuesta = await fetch(`${API_URL}/partida/nueva`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': API_KEY
+        },
+        body: JSON.stringify({ jugadores: 3 })
+      });
+      datos = await respuesta.json();
     }
+
+    partidaId = datos.id;
+    socket.emit('unirse', partidaId);
+    renderEstado(datos.estado);
+
+  } catch (error) {
+    console.error('Error cargando partida:', error);
+  }
+}
 
     async function ejecutarAccion(accion) {
       if (!partidaId) return;

@@ -70,6 +70,19 @@ app.get('/', (req, res) => {
   res.json({ mensaje: 'Motor de Poker funcionando 🃏' });
 });
 
+// Ruta: obtener el estado de una partida existente
+app.get('/partida/:id', (req, res) => {
+  const { id } = req.params;
+  const partida = partidas[id];
+
+  if (!partida) {
+    return res.status(404).json({ error: 'Partida no encontrada' });
+  }
+
+  registrarLog(req.cliente, `/partida/${id}`, 200);
+  res.json({ id, estado: partida });
+});
+
 // Ruta: crear una nueva partida con estado persistente
 app.post('/partida/nueva', (req, res) => {
   const numJugadores = req.body.jugadores || 3;
