@@ -94,8 +94,7 @@ app.post('/partida/nueva', (req, res) => {
     jugadores,
     tablero,
     pozo: apuestaMinima + apuestaMinima / 2,
-    turnoActual: 2 % numJugadores, // empieza el tercero (o el primero si solo hay 2)
-    fase: 'preflop',
+    turnoActual: 2 % numJugadores,
     apuestaMinima,
     apuestaMaxima: apuestaMinima * 4
   };

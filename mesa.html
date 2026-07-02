@@ -72,7 +72,8 @@
       justify-content: center;
       font-size: 13px;
       transform: translate(-50%, -50%);
-    } 
+    }
+
     .asiento.ocupado {
       background: rgba(255,255,255,0.15);
       border: 2px solid rgba(255,255,255,0.6);
@@ -107,21 +108,11 @@
       box-shadow: 0 2px 4px rgba(0,0,0,0.4);
     }
 
-    .carta.roja {
-      color: #d32f2f;
-    }
+    .carta.roja { color: #d32f2f; }
+    .carta.negra { color: #1a1a1a; }
 
-    .carta.negra {
-      color: #1a1a1a;
-    }
-
-    .valor-carta {
-      font-size: 18px;
-    }
-
-    .palo-carta {
-      font-size: 16px;
-    }
+    .valor-carta { font-size: 18px; }
+    .palo-carta { font-size: 16px; }
 
     .cartas-jugador {
       display: flex;
@@ -149,20 +140,60 @@
       background: repeating-linear-gradient(45deg, #1e3a8a, #1e3a8a 4px, #2563eb 4px, #2563eb 8px);
       border: 1px solid rgba(255,255,255,0.4);
     }
+
     .asiento.principal {
-  width: 110px;
-  height: 75px;
-  border: 2px solid white;
-  box-shadow: 0 0 14px rgba(255,255,255,0.5);
-  z-index: 10;
-}
+      width: 110px;
+      height: 75px;
+      border: 2px solid white;
+      box-shadow: 0 0 14px rgba(255,255,255,0.5);
+      z-index: 10;
+    }
 
-.asiento.principal .carta-mini {
-  width: 28px;
-  height: 40px;
-  font-size: 11px;
-}
+    .asiento.principal .carta-mini {
+      width: 28px;
+      height: 40px;
+      font-size: 11px;
+    }
 
+    .acciones {
+      position: absolute;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 12px;
+      z-index: 20;
+    }
+
+    .btn-accion {
+      padding: 10px 24px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: bold;
+      cursor: pointer;
+      background: rgba(255,255,255,0.15);
+      color: white;
+      border: 1px solid rgba(255,255,255,0.3);
+      transition: background 0.2s;
+    }
+
+    .btn-accion:hover {
+      background: rgba(255,255,255,0.25);
+    }
+
+    .btn-accion.btn-bet {
+      background: #2d6a4f;
+      border-color: #52b788;
+      color: white;
+    }
+
+    .btn-accion.btn-bet:hover {
+      background: #40916c;
+    }
+
+    .acciones.oculto {
+      display: none;
+    }
   </style>
 </head>
 <body>
@@ -179,196 +210,212 @@
     </div>
 
     <div class="asientos" id="asientos"></div>
+
+    <div class="acciones oculto" id="acciones">
+      <button class="btn-accion" onclick="ejecutarAccion('fold')">Retirarse</button>
+      <button class="btn-accion" onclick="ejecutarAccion('check')">Pasar</button>
+      <button class="btn-accion btn-bet" onclick="ejecutarAccion('bet')">Apostar $50</button>
+    </div>
   </div>
 
   <script>
-  const API_URL = 'http://localhost:3000';
-  const API_KEY = 'pk_facilitobet_x7k2m9q3';
+    const API_URL = 'http://localhost:3000';
+    const API_KEY = 'pk_facilitobet_x7k2m9q3';
+    const MI_JUGADOR_ID = 1;
 
-  // Estado base con datos quemados para lo que la API aún no devuelve
-  const estadoBase = {
-    pozo: 150,
-    miAsiento: 2,
-    jugadores: [
-      { asiento: 0, nombre: "Carlos", fichas: 500, esTurno: true, cartas: [{valor:"Q", palo:"♠"}, {valor:"J", palo:"♠"}] },
-      { asiento: 2, nombre: "Tú", fichas: 600, esTurno: false, cartas: [{valor:"K", palo:"♣"}, {valor:"K", palo:"♦"}] },
-      { asiento: 3, nombre: "María", fichas: 320, esTurno: false, cartas: [{valor:"9", palo:"♥"}, {valor:"2", palo:"♣"}] },
-      { asiento: 6, nombre: "Pedro", fichas: 780, esTurno: false, cartas: [{valor:"10", palo:"♦"}, {valor:"4", palo:"♠"}] }
-    ]
-  };
+    let partidaId = null;
 
-  // Transforma la respuesta del servidor al formato que entiende la mesa
-  function mapearCartasComunitarias(tablero) {
-    const cartas = [];
-
-    // El flop siempre es un array de 3
-    if (tablero.flop) {
-      cartas.push(...tablero.flop);
-    }
-    // El turn y river son objetos individuales
-    if (tablero.turn) {
-      cartas.push(tablero.turn);
-    }
-    if (tablero.river) {
-      cartas.push(tablero.river);
-    }
-
-    return cartas; // devuelve entre 0 y 5 cartas según lo que haya
-  }
-
-  async function cargarPartida() {
-  try {
-    const respuesta = await fetch(`${API_URL}/partida`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': API_KEY
-      },
-      body: JSON.stringify({ jugadores: 3 })
-    });
-
-    const datos = await respuesta.json();
-
-    const totalAsientos = 9;
-
-    // Asientos fijos para los demás jugadores (distribuidos arriba)
-    const asientosOtros = [6, 0, 4, 8, 1, 5, 7, 3]; // asiento 2 reservado para Tú
-
-    const jugadoresMapeados = datos.jugadores.map((j, index) => {
-      if (index === 0) {
-        // Tú siempre en el asiento 2 (centro abajo)
-        return {
-          asiento: 2,
-          nombre: 'Tú',
-          fichas: j.fichas,
-          esTurno: true,
-          cartas: j.cartas
-        };
-      } else {
-        // Los demás se distribuyen en los asientos disponibles
-        return {
-          asiento: asientosOtros[index - 1],
-          nombre: `Jugador ${j.jugador}`,
-          fichas: j.fichas,
-          esTurno: false,
-          cartas: j.cartas
-        };
+    function mapearCartasComunitarias(tablero, fase) {
+      const cartas = [];
+      if (fase === 'preflop') return cartas;
+      if (tablero.flop) cartas.push(...tablero.flop);
+      if (fase === 'turn' || fase === 'river' || fase === 'showdown') {
+        if (tablero.turn) cartas.push(tablero.turn);
       }
-    });
+      if (fase === 'river' || fase === 'showdown') {
+        if (tablero.river) cartas.push(tablero.river);
+      }
+      return cartas;
+    }
 
-    const estadoFinal = {
-      pozo: 0,
-      miAsiento: 2,
-      cartasComunitarias: mapearCartasComunitarias(datos.tablero),
-      jugadores: jugadoresMapeados
-    };
+    function crearCartaHTML(carta) {
+      const esRoja = (carta.palo === '♥' || carta.palo === '♦');
+      const div = document.createElement('div');
+      div.className = 'carta-mini' + (esRoja ? ' roja' : ' negra');
+      div.innerHTML = `
+        <div class="valor-mini">${carta.valor}</div>
+        <div class="palo-mini">${carta.palo}</div>
+      `;
+      return div;
+    }
 
-    crearAsientos(totalAsientos, estadoFinal);
-    actualizarPozo(estadoFinal.pozo);
-    renderCartasComunitarias(estadoFinal.cartasComunitarias);
+    function crearAsientos(totalAsientos, estado) {
+      const contenedor = document.getElementById('asientos');
+      contenedor.innerHTML = '';
+      const centroX = 400;
+      const centroY = 225;
+      const radioX = 380;
+      const radioY = 270;
 
-  } catch (error) {
-    console.error('Error conectando con la API:', error);
-  }
-}
+      for (let i = 0; i < totalAsientos; i++) {
+        const offsetRotacion = 10;
+        const anguloGrados = i * (360 / totalAsientos) + offsetRotacion;
+        const anguloRadianes = anguloGrados * (Math.PI / 180);
 
-  function crearCartaHTML(carta) {
-    const esRoja = (carta.palo === '♥' || carta.palo === '♦');
-    const div = document.createElement('div');
-    div.className = 'carta-mini' + (esRoja ? ' roja' : ' negra');
-    div.innerHTML = `
-      <div class="valor-mini">${carta.valor}</div>
-      <div class="palo-mini">${carta.palo}</div>
-    `;
-    return div;
-  }
+        const x = centroX + radioX * Math.cos(anguloRadianes);
+        const y = centroY + radioY * Math.sin(anguloRadianes);
 
-  function crearAsientos(totalAsientos, estado) {
-    const contenedor = document.getElementById('asientos');
-    contenedor.innerHTML = ''; // limpiamos antes de redibujar
-    const centroX = 400;
-    const centroY = 225;
-    const radioX = 380;
-    const radioY = 270;
+        const jugador = estado.jugadores.find(j => j.asiento === i);
+        const asientoDiv = document.createElement('div');
+        asientoDiv.style.left = x + 'px';
+        asientoDiv.style.top = y + 'px';
 
-    for (let i = 0; i < totalAsientos; i++) {
-      const offsetRotacion = 10;
-      const anguloGrados = i * (360 / totalAsientos) + offsetRotacion;
-      const anguloRadianes = anguloGrados * (Math.PI / 180);
+        if (jugador) {
+          asientoDiv.className = 'asiento ocupado';
+          if (jugador.esTurno) asientoDiv.className += ' turno';
+          if (jugador.asiento === estado.miAsiento) asientoDiv.className += ' principal';
 
-      const x = centroX + radioX * Math.cos(anguloRadianes);
-      const y = centroY + radioY * Math.sin(anguloRadianes);
+          asientoDiv.innerHTML = `
+            <div class="nombre-jugador">${jugador.nombre}</div>
+            <div class="fichas-jugador">$${jugador.fichas}</div>
+          `;
 
-      const jugador = estado.jugadores.find(j => j.asiento === i);
+          const contenedorCartas = document.createElement('div');
+          contenedorCartas.className = 'cartas-jugador';
+          const esMiAsiento = (jugador.asiento === estado.miAsiento);
 
-      const asientoDiv = document.createElement('div');
-      asientoDiv.style.left = x + 'px';
-      asientoDiv.style.top = y + 'px';
+          jugador.cartas.forEach(carta => {
+            if (esMiAsiento) {
+              contenedorCartas.appendChild(crearCartaHTML(carta));
+            } else {
+              const reverso = document.createElement('div');
+              reverso.className = 'carta-mini reverso';
+              contenedorCartas.appendChild(reverso);
+            }
+          });
 
-      if (jugador) {
-        asientoDiv.className = 'asiento ocupado';
-        if (jugador.esTurno) asientoDiv.className += ' turno';
-        if (jugador.asiento === estado.miAsiento) asientoDiv.className += ' principal';
+          asientoDiv.appendChild(contenedorCartas);
+        } else {
+          asientoDiv.className = 'asiento';
+          asientoDiv.textContent = 'Vacío';
+        }
 
-        asientoDiv.innerHTML = `
-          <div class="nombre-jugador">${jugador.nombre}</div>
-          <div class="fichas-jugador">$${jugador.fichas}</div>
-        `;
+        contenedor.appendChild(asientoDiv);
+      }
+    }
 
-        const contenedorCartas = document.createElement('div');
-        contenedorCartas.className = 'cartas-jugador';
-        const esMiAsiento = (jugador.asiento === estado.miAsiento);
+    function actualizarPozo(monto) {
+      document.querySelector('.pozo').textContent = `Pozo: $${monto}`;
+    }
 
-        jugador.cartas.forEach(carta => {
-          if (esMiAsiento) {
-            contenedorCartas.appendChild(crearCartaHTML(carta));
-          } else {
-            const reverso = document.createElement('div');
-            reverso.className = 'carta-mini reverso';
-            contenedorCartas.appendChild(reverso);
-          }
+    function renderCartasComunitarias(cartas) {
+      const contenedor = document.querySelector('.cartas-comunitarias');
+      contenedor.innerHTML = '';
+      for (let i = 0; i < 5; i++) {
+        const cartaDiv = document.createElement('div');
+        if (i < cartas.length) {
+          const carta = cartas[i];
+          const esRoja = (carta.palo === '♥' || carta.palo === '♦');
+          cartaDiv.className = 'carta' + (esRoja ? ' roja' : ' negra');
+          cartaDiv.innerHTML = `
+            <div class="valor-carta">${carta.valor}</div>
+            <div class="palo-carta">${carta.palo}</div>
+          `;
+        } else {
+          cartaDiv.className = 'carta-placeholder';
+        }
+        contenedor.appendChild(cartaDiv);
+      }
+    }
+
+    function actualizarBotones(estado) {
+      const acciones = document.getElementById('acciones');
+      const jugadorActual = estado.jugadores[estado.turnoActual];
+      if (jugadorActual && jugadorActual.id === MI_JUGADOR_ID) {
+        acciones.classList.remove('oculto');
+      } else {
+        acciones.classList.add('oculto');
+      }
+    }
+
+    function renderEstado(estado) {
+      const totalAsientos = 9;
+      const asientosOtros = [6, 0, 4, 8, 1, 5, 7, 3];
+
+      const jugadoresMapeados = estado.jugadores.map((j, index) => {
+        if (j.id === MI_JUGADOR_ID) {
+          return {
+            asiento: 2,
+            nombre: 'Tú',
+            fichas: j.fichas,
+            esTurno: estado.jugadores[estado.turnoActual].id === MI_JUGADOR_ID,
+            cartas: j.cartas,
+            activo: j.activo
+          };
+        } else {
+          const otroIndex = index > 0 ? index - 1 : index;
+          return {
+            asiento: asientosOtros[otroIndex],
+            nombre: `Jugador ${j.id}`,
+            fichas: j.fichas,
+            esTurno: estado.jugadores[estado.turnoActual].id === j.id,
+            cartas: j.cartas,
+            activo: j.activo
+          };
+        }
+      });
+
+      const estadoFinal = {
+        pozo: estado.pozo,
+        miAsiento: 2,
+        cartasComunitarias: mapearCartasComunitarias(estado.tablero, estado.fase),
+        jugadores: jugadoresMapeados
+      };
+
+      crearAsientos(totalAsientos, estadoFinal);
+      actualizarPozo(estadoFinal.pozo);
+      renderCartasComunitarias(estadoFinal.cartasComunitarias);
+      actualizarBotones(estado);
+    }
+
+    async function cargarPartida() {
+      try {
+        const respuesta = await fetch(`${API_URL}/partida/nueva`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': API_KEY
+          },
+          body: JSON.stringify({ jugadores: 3 })
         });
-
-        asientoDiv.appendChild(contenedorCartas);
-      } else {
-        asientoDiv.className = 'asiento';
-        asientoDiv.textContent = 'Vacío';
+        const datos = await respuesta.json();
+        partidaId = datos.id;
+        renderEstado(datos.estado);
+      } catch (error) {
+        console.error('Error cargando partida:', error);
       }
-
-      contenedor.appendChild(asientoDiv);
     }
-  }
 
-  function actualizarPozo(monto) {
-    document.querySelector('.pozo').textContent = `Pozo: $${monto}`;
-  }
-
-  function renderCartasComunitarias(cartas) {
-    const contenedor = document.querySelector('.cartas-comunitarias');
-    contenedor.innerHTML = '';
-
-    for (let i = 0; i < 5; i++) {
-      const cartaDiv = document.createElement('div');
-
-      if (i < cartas.length) {
-        const carta = cartas[i];
-        const esRoja = (carta.palo === '♥' || carta.palo === '♦');
-        cartaDiv.className = 'carta' + (esRoja ? ' roja' : ' negra');
-        cartaDiv.innerHTML = `
-          <div class="valor-carta">${carta.valor}</div>
-          <div class="palo-carta">${carta.palo}</div>
-        `;
-      } else {
-        cartaDiv.className = 'carta-placeholder';
+    async function ejecutarAccion(accion) {
+      if (!partidaId) return;
+      try {
+        const respuesta = await fetch(`${API_URL}/partida/${partidaId}/accion`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': API_KEY
+          },
+          body: JSON.stringify({ accion, monto: 50 })
+        });
+        const datos = await respuesta.json();
+        renderEstado(datos.estado);
+      } catch (error) {
+        console.error('Error ejecutando acción:', error);
       }
-
-      contenedor.appendChild(cartaDiv);
     }
-  }
 
-  // Arrancamos
-  cargarPartida();
-</script>
+    cargarPartida();
+  </script>
 
 </body>
 </html>
