@@ -195,6 +195,37 @@
     .acciones.oculto {
       display: none;
     }
+
+    .overlay-ganador {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0,0,0,0.75);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50% / 40%;
+  z-index: 30;
+  color: white;
+}
+
+.overlay-ganador h2 {
+  font-size: 28px;
+  color: #ffd700;
+  margin-bottom: 8px;
+}
+
+.overlay-ganador p {
+  font-size: 16px;
+  color: #aaffaa;
+}
+
+.overlay-ganador.oculto {
+  display: none;
+}
   </style>
 </head>
 <body>
@@ -211,6 +242,10 @@
     </div>
 
     <div class="asientos" id="asientos"></div>
+     <div class="overlay-ganador oculto" id="overlay-ganador">
+     <h2 id="texto-ganador">¡Ganador!</h2>
+     <p id="texto-mano">Full House</p>
+   </div>
 
     <div class="acciones oculto" id="acciones">
       <button class="btn-accion" onclick="ejecutarAccion('fold')">Retirarse</button>
@@ -393,6 +428,7 @@
       actualizarPozo(estadoFinal.pozo);
       renderCartasComunitarias(estadoFinal.cartasComunitarias);
       actualizarBotones(estado);
+      mostrarShowdown(estado);
     }
 
     async function cargarPartida() {
@@ -446,7 +482,26 @@
         console.error('Error ejecutando acción:', error);
       }
     }
+    function mostrarShowdown(estado) {
+  if (estado.fase !== 'showdown') {
+    document.getElementById('overlay-ganador').classList.add('oculto');
+    return;
+  }
 
+  // Mostrar overlay con el ganador
+  const overlay = document.getElementById('overlay-ganador');
+  overlay.classList.remove('oculto');
+
+  if (estado.ganador) {
+    const jugadorGanador = estado.jugadores[estado.ganador.jugador - 1];
+    const esYo = jugadorGanador && jugadorGanador.id === MI_JUGADOR_ID;
+    document.getElementById('texto-ganador').textContent = esYo
+      ? '🏆 ¡Ganaste!'
+      : `Ganó el Jugador ${estado.ganador.jugador}`;
+    document.getElementById('texto-mano').textContent =
+      estado.ganador.evaluacion.nombre;
+  }
+}
     cargarPartida();
   </script>
 

@@ -93,6 +93,11 @@ app.post('/partida/nueva', (req, res) => {
   const mazoRestante = mazo.slice(numJugadores * 2);
   const tablero = repartirTablero(mazoRestante);
 
+  // jugadores[0].fichas -= apuestaMinima / 2;
+  // jugadores[0].apuestaActual = apuestaMinima / 2;
+  // jugadores[1].fichas -= apuestaMinima;
+  // jugadores[1].apuestaActual = apuestaMinima;
+
   const jugadores = manos.map((cartas, index) => ({
     id: index + 1,
     cartas: cartas,
@@ -114,7 +119,8 @@ app.post('/partida/nueva', (req, res) => {
     jugadores,
     tablero,
     pozo: apuestaMinima + apuestaMinima / 2,
-    turnoActual: 2 % numJugadores,
+    turnoActual: 0 % numJugadores,
+    fase: 'preflop',
     apuestaMinima,
     apuestaMaxima: apuestaMinima * 4
   };
@@ -168,17 +174,30 @@ app.post('/partida/:id/accion', (req, res) => {
     partida.turnoActual = siguiente;
 
     // Avanzamos de fase si todos los activos ya apostaron igual
-    const apuestaMax = Math.max(...partida.jugadores.map(j => j.apuestaActual));
-    const todosIgualaron = jugadoresActivos.every(j => j.apuestaActual === apuestaMax);
+    partida.accionesRonda = (partida.accionesRonda || 0) + 1;
+    const todosIgualaron = partida.accionesRonda >= jugadoresActivos.length;
 
     if (todosIgualaron) {
       if (partida.fase === 'preflop') partida.fase = 'flop';
       else if (partida.fase === 'flop') partida.fase = 'turn';
       else if (partida.fase === 'turn') partida.fase = 'river';
       else if (partida.fase === 'river') partida.fase = 'showdown';
+      // Si llegamos al showdown, calculamos el ganador
+      if (partida.fase === 'showdown') {
+      const cartasTablero = [
+      ...partida.tablero.flop,
+      partida.tablero.turn,
+      partida.tablero.river
+  ];
+  const manosActivas = partida.jugadores
+    .filter(j => j.activo)
+    .map(j => j.cartas);
+  partida.ganador = determinarGanador(manosActivas, cartasTablero)[0];
+}
 
       // Reiniciamos apuestas de la ronda
       partida.jugadores.forEach(j => j.apuestaActual = 0);
+      partida.accionesRonda = 0;
     }
   }
 
