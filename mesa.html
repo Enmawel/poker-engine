@@ -23,8 +23,7 @@
       border-radius: 50% / 40%;
       border: 12px solid #5c3a21;
       box-shadow: 0 0 30px rgba(0,0,0,0.6);
-    }
-
+}
     .cartas-comunitarias {
       position: absolute;
       top: 50%;
@@ -196,36 +195,109 @@
       display: none;
     }
 
-    .overlay-ganador {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(0,0,0,0.75);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50% / 40%;
-  z-index: 30;
-  color: white;
-}
+    /* --- MODAL DE GANADOR --- */
+    .modal-ganador {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.55);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50% / 40%;
+      z-index: 40;
+    }
 
-.overlay-ganador h2 {
-  font-size: 28px;
-  color: #ffd700;
-  margin-bottom: 8px;
-}
+    .modal-ganador.oculto {
+      display: none;
+    }
 
-.overlay-ganador p {
-  font-size: 16px;
-  color: #aaffaa;
-}
+    .modal-contenido {
+      position: relative;
+      background: #14342a;
+      border: 2px solid #ffd700;
+      border-radius: 16px;
+      padding: 28px 36px;
+      min-width: 260px;
+      text-align: center;
+      box-shadow: 0 8px 28px rgba(0,0,0,0.7);
+      color: white;
+    }
 
-.overlay-ganador.oculto {
-  display: none;
-}
+    .btn-cerrar-modal {
+      position: absolute;
+      top: 6px;
+      right: 10px;
+      background: transparent;
+      border: none;
+      color: white;
+      font-size: 20px;
+      cursor: pointer;
+      line-height: 1;
+      opacity: 0.7;
+    }
+
+    .btn-cerrar-modal:hover {
+      opacity: 1;
+      color: #ffd700;
+    }
+
+    .contador-cierre {
+      position: absolute;
+      top: 30px;
+      right: 12px;
+      font-size: 11px;
+      color: rgba(255,255,255,0.5);
+    }
+
+    .modal-contenido h2 {
+      font-size: 26px;
+      color: #ffd700;
+      margin: 6px 0 4px;
+    }
+
+    .modal-contenido p {
+      font-size: 16px;
+      color: #aaffaa;
+      margin: 0 0 14px;
+    }
+
+    .cartas-ganadoras {
+      display: flex;
+      gap: 6px;
+      justify-content: center;
+    }
+
+    /* --- CONFETI --- */
+    .confeti-contenedor {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 50;
+    }
+
+    .confeti-pieza {
+      position: absolute;
+      top: -12px;
+      width: 8px;
+      height: 14px;
+      opacity: 0.9;
+      animation-name: caerConfeti;
+      animation-timing-function: linear;
+      animation-fill-mode: forwards;
+    }
+
+    @keyframes caerConfeti {
+      to {
+        transform: translateY(480px) rotate(360deg);
+        opacity: 0;
+      }
+    }
   </style>
 </head>
 <body>
@@ -242,10 +314,18 @@
     </div>
 
     <div class="asientos" id="asientos"></div>
-     <div class="overlay-ganador oculto" id="overlay-ganador">
-     <h2 id="texto-ganador">¡Ganador!</h2>
-     <p id="texto-mano">Full House</p>
-   </div>
+
+    <div class="modal-ganador oculto" id="overlay-ganador">
+      <div class="modal-contenido">
+        <button class="btn-cerrar-modal" onclick="cerrarModalGanador()">✕</button>
+        <div class="contador-cierre" id="contador-cierre">15</div>
+        <h2 id="texto-ganador">¡Ganador!</h2>
+        <p id="texto-mano">Full House</p>
+        <div class="cartas-ganadoras" id="cartas-ganadoras"></div>
+      </div>
+    </div>
+
+    <div class="confeti-contenedor" id="confeti-contenedor"></div>
 
     <div class="acciones oculto" id="acciones">
       <button class="btn-accion" onclick="ejecutarAccion('fold')">Retirarse</button>
@@ -258,12 +338,10 @@
     const API_URL = 'http://localhost:3000';
     const API_KEY = 'pk_facilitobet_x7k2m9q3';
 
-    // Leemos los parámetros de la URL
     const params = new URLSearchParams(window.location.search);
     const MI_JUGADOR_ID = parseInt(params.get('jugadorId')) || 1;
     const mesaIdParam = params.get('mesaId') || null;
 
-    // Conexión WebSocket
     const socket = io(API_URL);
 
     socket.on('connect', () => {
@@ -276,6 +354,9 @@
     });
 
     let partidaId = null;
+    let showdownMostrado = false;
+    let timerCierreShowdown = null;
+    let intervalContador = null;
 
     function mapearCartasComunitarias(tablero, fase) {
       const cartas = [];
@@ -297,6 +378,17 @@
       div.innerHTML = `
         <div class="valor-mini">${carta.valor}</div>
         <div class="palo-mini">${carta.palo}</div>
+      `;
+      return div;
+    }
+
+    function crearCartaModalHTML(carta) {
+      const esRoja = (carta.palo === '♥' || carta.palo === '♦');
+      const div = document.createElement('div');
+      div.className = 'carta' + (esRoja ? ' roja' : ' negra');
+      div.innerHTML = `
+        <div class="valor-carta">${carta.valor}</div>
+        <div class="palo-carta">${carta.palo}</div>
       `;
       return div;
     }
@@ -334,7 +426,8 @@
 
           const contenedorCartas = document.createElement('div');
           contenedorCartas.className = 'cartas-jugador';
-          const esMiAsiento = (jugador.asiento === estado.miAsiento);
+          const esShowdown = (estado.fase === 'showdown');
+          const esMiAsiento = (jugador.asiento === estado.miAsiento) || esShowdown;
 
           jugador.cartas.forEach(carta => {
             if (esMiAsiento) {
@@ -383,6 +476,10 @@
     function actualizarBotones(estado) {
       const acciones = document.getElementById('acciones');
       const jugadorActual = estado.jugadores[estado.turnoActual];
+      if (estado.fase === 'showdown') {
+        acciones.classList.add('oculto');
+        return;
+      }
       if (jugadorActual && jugadorActual.id === MI_JUGADOR_ID) {
         acciones.classList.remove('oculto');
       } else {
@@ -394,32 +491,35 @@
       const totalAsientos = 9;
       const asientosOtros = [6, 0, 4, 8, 1, 5, 7, 3];
 
-      const jugadoresMapeados = estado.jugadores.map((j, index) => {
-        if (j.id === MI_JUGADOR_ID) {
-          return {
-            asiento: 2,
-            nombre: 'Tú',
-            fichas: j.fichas,
-            esTurno: estado.jugadores[estado.turnoActual].id === MI_JUGADOR_ID,
-            cartas: j.cartas,
-            activo: j.activo
-          };
-        } else {
-          const otroIndex = index > 0 ? index - 1 : index;
-          return {
-            asiento: asientosOtros[otroIndex],
-            nombre: `Jugador ${j.id}`,
-            fichas: j.fichas,
-            esTurno: estado.jugadores[estado.turnoActual].id === j.id,
-            cartas: j.cartas,
-            activo: j.activo
-          };
-        }
-      });
+      const otrosJugadores = estado.jugadores.filter(j => j.id !== MI_JUGADOR_ID);
+
+     const jugadoresMapeados = estado.jugadores.map((j) => {
+       if (j.id === MI_JUGADOR_ID) {
+       return {
+       asiento: 2,
+       nombre: 'Tú',
+       fichas: j.fichas,
+       esTurno: estado.jugadores[estado.turnoActual].id === MI_JUGADOR_ID,
+       cartas: j.cartas,
+       activo: j.activo
+     };
+     } else {
+      const otroIndex = otrosJugadores.findIndex(o => o.id === j.id);
+      return {
+      asiento: asientosOtros[otroIndex],
+      nombre: `Jugador ${j.id}`,
+      fichas: j.fichas,
+      esTurno: estado.jugadores[estado.turnoActual].id === j.id,
+      cartas: j.cartas,
+      activo: j.activo
+    };
+   }
+  });
 
       const estadoFinal = {
         pozo: estado.pozo,
         miAsiento: 2,
+        fase: estado.fase,
         cartasComunitarias: mapearCartasComunitarias(estado.tablero, estado.fase),
         jugadores: jugadoresMapeados
       };
@@ -432,38 +532,36 @@
     }
 
     async function cargarPartida() {
-  try {
-    let datos;
+      try {
+        let datos;
 
-    if (mesaIdParam) {
-      // Nos unimos a una partida existente
-      const respuesta = await fetch(`${API_URL}/partida/${mesaIdParam}`, {
-        method: 'GET',
-        headers: { 'x-api-key': API_KEY }
-      });
-      const json = await respuesta.json();
-      datos = { id: mesaIdParam, estado: json.estado };
-    } else {
-      // Creamos una partida nueva
-      const respuesta = await fetch(`${API_URL}/partida/nueva`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': API_KEY
-        },
-        body: JSON.stringify({ jugadores: 3 })
-      });
-      datos = await respuesta.json();
+        if (mesaIdParam) {
+          const respuesta = await fetch(`${API_URL}/partida/${mesaIdParam}`, {
+            method: 'GET',
+            headers: { 'x-api-key': API_KEY }
+          });
+          const json = await respuesta.json();
+          datos = { id: mesaIdParam, estado: json.estado };
+        } else {
+          const respuesta = await fetch(`${API_URL}/partida/nueva`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-api-key': API_KEY
+            },
+            body: JSON.stringify({ jugadores: 3 })
+          });
+          datos = await respuesta.json();
+        }
+
+        partidaId = datos.id;
+        socket.emit('unirse', partidaId);
+        renderEstado(datos.estado);
+
+      } catch (error) {
+        console.error('Error cargando partida:', error);
+      }
     }
-
-    partidaId = datos.id;
-    socket.emit('unirse', partidaId);
-    renderEstado(datos.estado);
-
-  } catch (error) {
-    console.error('Error cargando partida:', error);
-  }
-}
 
     async function ejecutarAccion(accion) {
       if (!partidaId) return;
@@ -482,26 +580,92 @@
         console.error('Error ejecutando acción:', error);
       }
     }
+
     function mostrarShowdown(estado) {
-  if (estado.fase !== 'showdown') {
-    document.getElementById('overlay-ganador').classList.add('oculto');
-    return;
-  }
+      const modal = document.getElementById('overlay-ganador');
 
-  // Mostrar overlay con el ganador
-  const overlay = document.getElementById('overlay-ganador');
-  overlay.classList.remove('oculto');
+      if (estado.fase !== 'showdown') {
+        modal.classList.add('oculto');
+        showdownMostrado = false;
+        if (timerCierreShowdown) clearTimeout(timerCierreShowdown);
+        if (intervalContador) clearInterval(intervalContador);
+        return;
+      }
 
-  if (estado.ganador) {
-    const jugadorGanador = estado.jugadores[estado.ganador.jugador - 1];
-    const esYo = jugadorGanador && jugadorGanador.id === MI_JUGADOR_ID;
-    document.getElementById('texto-ganador').textContent = esYo
-      ? '🏆 ¡Ganaste!'
-      : `Ganó el Jugador ${estado.ganador.jugador}`;
-    document.getElementById('texto-mano').textContent =
-      estado.ganador.evaluacion.nombre;
-  }
-}
+      // Si ya armamos el modal para esta mano, no lo repetimos
+      if (showdownMostrado) return;
+      showdownMostrado = true;
+
+      modal.classList.remove('oculto');
+
+      if (estado.ganador) {
+        const jugadorGanador = estado.jugadores[estado.ganador.jugador - 1];
+        const esYo = jugadorGanador && jugadorGanador.id === MI_JUGADOR_ID;
+
+        document.getElementById('texto-ganador').textContent = esYo
+          ? '🏆 ¡Ganaste!'
+          : `Ganó el Jugador ${estado.ganador.jugador}`;
+        document.getElementById('texto-mano').textContent =
+          estado.ganador.evaluacion.nombre;
+
+        const contenedorCartas = document.getElementById('cartas-ganadoras');
+        contenedorCartas.innerHTML = '';
+        estado.ganador.evaluacion.cartas.forEach(carta => {
+          contenedorCartas.appendChild(crearCartaModalHTML(carta));
+        });
+
+        if (esYo) {
+          lanzarConfeti();
+        }
+      }
+
+      let segundosRestantes = 15;
+      document.getElementById('contador-cierre').textContent = segundosRestantes;
+
+      intervalContador = setInterval(() => {
+        segundosRestantes--;
+        document.getElementById('contador-cierre').textContent = segundosRestantes;
+        if (segundosRestantes <= 0) {
+          clearInterval(intervalContador);
+        }
+      }, 1000);
+
+      timerCierreShowdown = setTimeout(cerrarModalGanador, 15000);
+    }
+
+    function cerrarModalGanador() {
+      document.getElementById('overlay-ganador').classList.add('oculto');
+      document.getElementById('confeti-contenedor').innerHTML = '';
+      if (timerCierreShowdown) {
+        clearTimeout(timerCierreShowdown);
+        timerCierreShowdown = null;
+      }
+      if (intervalContador) {
+        clearInterval(intervalContador);
+        intervalContador = null;
+      }
+    }
+
+    function lanzarConfeti() {
+      const contenedor = document.getElementById('confeti-contenedor');
+      contenedor.innerHTML = '';
+      const colores = ['#ffd700', '#ff6b6b', '#4dabf7', '#69db7c', '#f783ac'];
+
+      for (let i = 0; i < 40; i++) {
+        const pieza = document.createElement('div');
+        pieza.className = 'confeti-pieza';
+        pieza.style.left = Math.random() * 100 + '%';
+        pieza.style.background = colores[Math.floor(Math.random() * colores.length)];
+        pieza.style.animationDuration = (1.5 + Math.random() * 1.5) + 's';
+        pieza.style.animationDelay = (Math.random() * 0.6) + 's';
+        contenedor.appendChild(pieza);
+      }
+
+      setTimeout(() => {
+        contenedor.innerHTML = '';
+      }, 3500);
+    }
+
     cargarPartida();
   </script>
 
