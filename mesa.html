@@ -40,6 +40,32 @@
       border-radius: 6px;
     }
 
+    /* --- MAZO VISUAL (decorativo) --- */
+    .mazo-visual {
+      position: absolute;
+      top: 70px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 50px;
+      height: 70px;
+    }
+
+    .mazo-visual .carta-dorso {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 50px;
+      height: 70px;
+      border-radius: 6px;
+      background: repeating-linear-gradient(45deg, #1e3a8a, #1e3a8a 4px, #2563eb 4px, #2563eb 8px);
+      border: 1px solid rgba(255,255,255,0.4);
+      box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+    }
+
+    .mazo-visual .carta-dorso:nth-child(1) { transform: translate(0px, 0px); z-index: 3; }
+    .mazo-visual .carta-dorso:nth-child(2) { transform: translate(2px, -2px); z-index: 2; }
+    .mazo-visual .carta-dorso:nth-child(3) { transform: translate(4px, -4px); z-index: 1; }
+
     .pozo {
       position: absolute;
       top: 35%;
@@ -95,6 +121,7 @@
     }
 
     .carta {
+      position: relative;
       width: 50px;
       height: 70px;
       background: white;
@@ -112,6 +139,31 @@
 
     .valor-carta { font-size: 18px; }
     .palo-carta { font-size: 16px; }
+
+    /* --- ANIMACIÓN: carta repartida desde el mazo --- */
+    .carta.nueva {
+      animation: deslizarCarta 0.5s ease-out forwards;
+    }
+
+    @keyframes deslizarCarta {
+      from { transform: translate(var(--dx, 0px), var(--dy, 0px)) scale(0.9); }
+      to { transform: translate(0, 0) scale(1); }
+    }
+
+    .carta-dorso-overlay {
+      position: absolute;
+      inset: 0;
+      border-radius: 6px;
+      background: repeating-linear-gradient(45deg, #1e3a8a, #1e3a8a 4px, #2563eb 4px, #2563eb 8px);
+      border: 1px solid rgba(255,255,255,0.4);
+      animation: voltearCarta 0.3s ease-in 0.32s forwards;
+    }
+
+    @keyframes voltearCarta {
+      0%   { transform: scaleX(1); opacity: 1; }
+      99%  { transform: scaleX(0); opacity: 1; }
+      100% { transform: scaleX(0); opacity: 0; visibility: hidden; }
+    }
 
     .cartas-jugador {
       display: flex;
@@ -304,6 +356,12 @@
   <div class="mesa">
     <div class="pozo">Pozo: $0</div>
 
+    <div class="mazo-visual">
+      <div class="carta-dorso"></div>
+      <div class="carta-dorso"></div>
+      <div class="carta-dorso"></div>
+    </div>
+
     <div class="cartas-comunitarias">
       <div class="carta-placeholder"></div>
       <div class="carta-placeholder"></div>
@@ -334,7 +392,6 @@
   </div>
 
   <script>
-    // Detecta automáticamente si estamos en local o en producción
     const ES_LOCAL = (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost');
     const API_URL = ES_LOCAL
       ? 'http://localhost:3000'
@@ -351,7 +408,10 @@
     let timerCierreShowdown = null;
     let intervalContador = null;
 
-    // Cargamos la librería de socket.io dinámicamente desde el mismo API_URL
+    // Control de animación del reparto de cartas comunitarias
+    let cartasPrevias = 0;
+    let primeraCargaCartas = true;
+
     function cargarSocketIoYArrancar() {
       const script = document.createElement('script');
       script.src = `${API_URL}/socket.io/socket.io.js`;
@@ -473,8 +533,10 @@
     function renderCartasComunitarias(cartas) {
       const contenedor = document.querySelector('.cartas-comunitarias');
       contenedor.innerHTML = '';
+
       for (let i = 0; i < 5; i++) {
         const cartaDiv = document.createElement('div');
+
         if (i < cartas.length) {
           const carta = cartas[i];
           const esRoja = (carta.palo === '♥' || carta.palo === '♦');
@@ -483,11 +545,29 @@
             <div class="valor-carta">${carta.valor}</div>
             <div class="palo-carta">${carta.palo}</div>
           `;
+
+          const esCartaNueva = !primeraCargaCartas && i >= cartasPrevias;
+          if (esCartaNueva) {
+            // Calculamos cuánto debe viajar la carta desde el mazo (arriba-centro) hasta su lugar
+            const dx = 116 - (58 * i);
+            const dy = -120;
+            cartaDiv.style.setProperty('--dx', dx + 'px');
+            cartaDiv.style.setProperty('--dy', dy + 'px');
+            cartaDiv.classList.add('nueva');
+
+            const overlayDorso = document.createElement('div');
+            overlayDorso.className = 'carta-dorso-overlay';
+            cartaDiv.appendChild(overlayDorso);
+          }
         } else {
           cartaDiv.className = 'carta-placeholder';
         }
+
         contenedor.appendChild(cartaDiv);
       }
+
+      cartasPrevias = cartas.length;
+      primeraCargaCartas = false;
     }
 
     function actualizarBotones(estado) {
@@ -592,7 +672,8 @@
           body: JSON.stringify({ accion, monto: 50 })
         });
         const datos = await respuesta.json();
-        renderEstado(datos.estado);
+        // No dibujamos acá — el WebSocket ('estadoActualizado') se encarga
+        // de actualizar la mesa para todos, incluido quien acaba de actuar.
       } catch (error) {
         console.error('Error ejecutando acción:', error);
       }
