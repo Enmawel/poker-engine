@@ -2,7 +2,6 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <script src="https://poker-engine-production-0995.up.railway.app/socket.io/socket.io.js"></script>
   <title>Mesa de Poker</title>
   <style>
     body {
@@ -335,28 +334,46 @@
   </div>
 
   <script>
-    const API_URL = 'https://poker-engine-production-0995.up.railway.app';
+    // Detecta automáticamente si estamos en local o en producción
+    const ES_LOCAL = (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost');
+    const API_URL = ES_LOCAL
+      ? 'http://localhost:3000'
+      : 'https://poker-engine-production-0995.up.railway.app';
     const API_KEY = 'pk_facilitobet_x7k2m9q3';
 
     const params = new URLSearchParams(window.location.search);
     const MI_JUGADOR_ID = parseInt(params.get('jugadorId')) || 1;
     const mesaIdParam = params.get('mesaId') || null;
 
-    const socket = io(API_URL);
-
-    socket.on('connect', () => {
-      console.log('WebSocket conectado:', socket.id);
-    });
-
-    socket.on('estadoActualizado', (estado) => {
-      console.log('Estado actualizado por WebSocket');
-      renderEstado(estado);
-    });
-
+    let socket = null;
     let partidaId = null;
     let showdownMostrado = false;
     let timerCierreShowdown = null;
     let intervalContador = null;
+
+    // Cargamos la librería de socket.io dinámicamente desde el mismo API_URL
+    function cargarSocketIoYArrancar() {
+      const script = document.createElement('script');
+      script.src = `${API_URL}/socket.io/socket.io.js`;
+      script.onload = () => {
+        socket = io(API_URL);
+
+        socket.on('connect', () => {
+          console.log('WebSocket conectado:', socket.id);
+        });
+
+        socket.on('estadoActualizado', (estado) => {
+          console.log('Estado actualizado por WebSocket');
+          renderEstado(estado);
+        });
+
+        cargarPartida();
+      };
+      script.onerror = () => {
+        console.error('No se pudo cargar socket.io desde', script.src);
+      };
+      document.head.appendChild(script);
+    }
 
     function mapearCartasComunitarias(tablero, fase) {
       const cartas = [];
@@ -493,28 +510,28 @@
 
       const otrosJugadores = estado.jugadores.filter(j => j.id !== MI_JUGADOR_ID);
 
-     const jugadoresMapeados = estado.jugadores.map((j) => {
-       if (j.id === MI_JUGADOR_ID) {
-       return {
-       asiento: 2,
-       nombre: 'Tú',
-       fichas: j.fichas,
-       esTurno: estado.jugadores[estado.turnoActual].id === MI_JUGADOR_ID,
-       cartas: j.cartas,
-       activo: j.activo
-     };
-     } else {
-      const otroIndex = otrosJugadores.findIndex(o => o.id === j.id);
-      return {
-      asiento: asientosOtros[otroIndex],
-      nombre: `Jugador ${j.id}`,
-      fichas: j.fichas,
-      esTurno: estado.jugadores[estado.turnoActual].id === j.id,
-      cartas: j.cartas,
-      activo: j.activo
-    };
-   }
-  });
+      const jugadoresMapeados = estado.jugadores.map((j) => {
+        if (j.id === MI_JUGADOR_ID) {
+          return {
+            asiento: 2,
+            nombre: 'Tú',
+            fichas: j.fichas,
+            esTurno: estado.jugadores[estado.turnoActual].id === MI_JUGADOR_ID,
+            cartas: j.cartas,
+            activo: j.activo
+          };
+        } else {
+          const otroIndex = otrosJugadores.findIndex(o => o.id === j.id);
+          return {
+            asiento: asientosOtros[otroIndex],
+            nombre: `Jugador ${j.id}`,
+            fichas: j.fichas,
+            esTurno: estado.jugadores[estado.turnoActual].id === j.id,
+            cartas: j.cartas,
+            activo: j.activo
+          };
+        }
+      });
 
       const estadoFinal = {
         pozo: estado.pozo,
@@ -592,7 +609,6 @@
         return;
       }
 
-      // Si ya armamos el modal para esta mano, no lo repetimos
       if (showdownMostrado) return;
       showdownMostrado = true;
 
@@ -666,7 +682,7 @@
       }, 3500);
     }
 
-    cargarPartida();
+    cargarSocketIoYArrancar();
   </script>
 
 </body>

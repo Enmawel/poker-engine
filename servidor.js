@@ -93,11 +93,6 @@ app.post('/partida/nueva', (req, res) => {
   const mazoRestante = mazo.slice(numJugadores * 2);
   const tablero = repartirTablero(mazoRestante);
 
-  // jugadores[0].fichas -= apuestaMinima / 2;
-  // jugadores[0].apuestaActual = apuestaMinima / 2;
-  // jugadores[1].fichas -= apuestaMinima;
-  // jugadores[1].apuestaActual = apuestaMinima;
-
   const jugadores = manos.map((cartas, index) => ({
     id: index + 1,
     cartas: cartas,
@@ -122,7 +117,10 @@ app.post('/partida/nueva', (req, res) => {
     turnoActual: 0 % numJugadores,
     fase: 'preflop',
     apuestaMinima,
-    apuestaMaxima: apuestaMinima * 4
+    apuestaMaxima: apuestaMinima * 4,
+    apuestaRonda: apuestaMinima,
+    accionesDesdeSubida: 0,
+    ultimoAgresor: null
   };
 
   registrarLog(req.cliente, '/partida/nueva', 200);
@@ -145,18 +143,33 @@ app.post('/partida/:id/accion', (req, res) => {
 
   const jugadorActual = partida.jugadores[partida.turnoActual];
 
-  // Procesamos la acción
   if (accion === 'fold') {
     jugadorActual.activo = false;
 
   } else if (accion === 'check') {
-    // No hace nada, solo pasa el turno
+    // Si hay una apuesta pendiente por igualar, esto funciona como "igualar" (call)
+    const faltante = partida.apuestaRonda - jugadorActual.apuestaActual;
+    if (faltante > 0) {
+      const aPagar = Math.min(faltante, jugadorActual.fichas);
+      jugadorActual.fichas -= aPagar;
+      jugadorActual.apuestaActual += aPagar;
+      partida.pozo += aPagar;
+    }
+    partida.accionesDesdeSubida = (partida.accionesDesdeSubida || 0) + 1;
 
   } else if (accion === 'bet') {
-    const apuesta = monto || partida.apuestaMinima;
-    jugadorActual.fichas -= apuesta;
-    jugadorActual.apuestaActual += apuesta;
-    partida.pozo += apuesta;
+    const incremento = monto || partida.apuestaMinima;
+    const nuevoTotal = partida.apuestaRonda + incremento;
+    const aPagar = nuevoTotal - jugadorActual.apuestaActual;
+
+    jugadorActual.fichas -= aPagar;
+    jugadorActual.apuestaActual = nuevoTotal;
+    partida.pozo += aPagar;
+
+    // Es una subida: todos deben reaccionar de nuevo
+    partida.apuestaRonda = nuevoTotal;
+    partida.ultimoAgresor = partida.turnoActual;
+    partida.accionesDesdeSubida = 1; // el propio agresor ya actuó
   }
 
   // Pasamos al siguiente jugador activo
@@ -173,31 +186,37 @@ app.post('/partida/:id/accion', (req, res) => {
     }
     partida.turnoActual = siguiente;
 
-    // Avanzamos de fase si todos los activos ya apostaron igual
-    partida.accionesRonda = (partida.accionesRonda || 0) + 1;
-    const todosIgualaron = partida.accionesRonda >= jugadoresActivos.length;
+    // Avanzamos de fase solo si todos igualaron Y todos reaccionaron
+    const todosIgualaron = jugadoresActivos.every(
+      j => j.apuestaActual === partida.apuestaRonda
+    );
+    const accionesCompletas =
+      (partida.accionesDesdeSubida || 0) >= jugadoresActivos.length;
 
-    if (todosIgualaron) {
+    if (todosIgualaron && accionesCompletas) {
       if (partida.fase === 'preflop') partida.fase = 'flop';
       else if (partida.fase === 'flop') partida.fase = 'turn';
       else if (partida.fase === 'turn') partida.fase = 'river';
       else if (partida.fase === 'river') partida.fase = 'showdown';
+
       // Si llegamos al showdown, calculamos el ganador
       if (partida.fase === 'showdown') {
-      const cartasTablero = [
-      ...partida.tablero.flop,
-      partida.tablero.turn,
-      partida.tablero.river
-  ];
-  const manosActivas = partida.jugadores
-    .filter(j => j.activo)
-    .map(j => j.cartas);
-  partida.ganador = determinarGanador(manosActivas, cartasTablero)[0];
-}
+        const cartasTablero = [
+          ...partida.tablero.flop,
+          partida.tablero.turn,
+          partida.tablero.river
+        ];
+        const manosActivas = partida.jugadores
+          .filter(j => j.activo)
+          .map(j => j.cartas);
+        partida.ganador = determinarGanador(manosActivas, cartasTablero)[0];
+      }
 
-      // Reiniciamos apuestas de la ronda
+      // Reiniciamos apuestas para la siguiente ronda
       partida.jugadores.forEach(j => j.apuestaActual = 0);
-      partida.accionesRonda = 0;
+      partida.apuestaRonda = 0;
+      partida.accionesDesdeSubida = 0;
+      partida.ultimoAgresor = null;
     }
   }
 
