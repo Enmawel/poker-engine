@@ -76,6 +76,68 @@
       font-size: 18px;
     }
 
+    /* --- FICHAS DE CASINO --- */
+    .ficha-capa, .ficha-viajera {
+      position: relative;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 50% 42%, #e74c3c 0%, #c0392b 55%, #8e2a1f 100%);
+      border: 2px solid #ffffff;
+      box-shadow:
+        0 3px 4px rgba(0,0,0,0.6),
+        inset 0 2px 3px rgba(255,255,255,0.35),
+        inset 0 -2px 3px rgba(0,0,0,0.35);
+    }
+
+    .ficha-capa::after,
+    .ficha-viajera::after {
+      content: '';
+      position: absolute;
+      inset: 3px;
+      border-radius: 50%;
+      border: 2px dashed rgba(255,255,255,0.85);
+    }
+
+    .ficha-capa {
+      margin-top: -14px;
+    }
+
+    .ficha-capa:first-child {
+      margin-top: 0;
+    }
+
+    .grupo-pozo {
+     position: absolute;
+     top: 157px;
+     left: 475px;
+     transform: translate(0, -50%);
+     display: flex;
+     flex-direction: row;
+     align-items: flex-end;
+     gap: 6px;
+     z-index: 25;
+}
+
+    .columna-fichas {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .ficha-viajera {
+      position: absolute;
+      z-index: 60;
+      animation: viajarFichaFlotante 0.55s ease-in forwards;
+    }
+
+    @keyframes viajarFichaFlotante {
+      to {
+        transform: translate(var(--dx, 0px), var(--dy, 0px));
+        opacity: 0.2;
+      }
+    }
+
     .asientos {
       position: absolute;
       top: 0;
@@ -99,20 +161,68 @@
       transform: translate(-50%, -50%);
     }
 
+    /* --- ASIENTO OCUPADO: estilo "píldora" con avatar --- */
     .asiento.ocupado {
-      background: rgba(255,255,255,0.15);
-      border: 2px solid rgba(255,255,255,0.6);
+      background: transparent;
+      border: none;
+      width: auto;
+      height: auto;
       flex-direction: column;
-      gap: 2px;
+      gap: 4px;
+      
+    }
+    
+    .asiento.principal {
+      flex-direction: column-reverse;
+      transform: translate(-50%, -50%) translateY(-50px);
+  }
+
+    .fila-jugador {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      background: rgba(15,15,15,0.85);
+      border-radius: 999px;
+      padding: 3px 3px 3px 16px;
+      border: 2px solid rgba(255,255,255,0.15);
+      white-space: nowrap;
+      min-width: 130px;
     }
 
-    .asiento.turno {
-      border: 2px solid #ffd700;
-      box-shadow: 0 0 12px rgba(255,215,0,0.6);
+    .asiento.turno .fila-jugador {
+      border-color: #ffd700;
+      box-shadow: 0 0 10px rgba(255,215,0,0.6);
+    }
+
+    .asiento.principal .fila-jugador {
+      border-color: #ffffff;
+      box-shadow: 0 0 12px rgba(255,255,255,0.5);
+    }
+
+    .avatar-jugador {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: #3a3a3a;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      border: 2px solid rgba(255,255,255,0.3);
+      flex-shrink: 0;
+    }
+
+    .info-jugador {
+      display: flex;
+      flex-direction: column;
+      line-height: 1.15;
     }
 
     .nombre-jugador {
       font-weight: bold;
+      font-size: 12px;
+      color: white;
     }
 
     .fichas-jugador {
@@ -168,7 +278,7 @@
     .cartas-jugador {
       display: flex;
       gap: 3px;
-      margin-top: 4px;
+      justify-content: center;
     }
 
     .carta-mini {
@@ -191,14 +301,20 @@
       background: repeating-linear-gradient(45deg, #1e3a8a, #1e3a8a 4px, #2563eb 4px, #2563eb 8px);
       border: 1px solid rgba(255,255,255,0.4);
     }
-
-    .asiento.principal {
-      width: 110px;
-      height: 75px;
-      border: 2px solid white;
-      box-shadow: 0 0 14px rgba(255,255,255,0.5);
-      z-index: 10;
+     
+     .asiento.principal .cartas-jugador .carta-mini {
+      width: 50px;
+      height: 70px;
+      font-size: 16px;
     }
+
+    .asiento.principal .cartas-jugador .carta-mini .valor-mini {
+      font-size: 18px;
+    }
+
+    .asiento.principal .cartas-jugador .carta-mini .palo-mini {
+      font-size: 16px;
+    } 
 
     .asiento.principal .carta-mini {
       width: 28px;
@@ -208,7 +324,7 @@
 
     .acciones {
       position: absolute;
-      bottom: 30px;
+      bottom: 90px;
       left: 50%;
       transform: translateX(-50%);
       display: flex;
@@ -356,6 +472,8 @@
   <div class="mesa">
     <div class="pozo">Pozo: $0</div>
 
+    <div class="grupo-pozo" id="fichas-pozo"></div>
+
     <div class="mazo-visual">
       <div class="carta-dorso"></div>
       <div class="carta-dorso"></div>
@@ -408,9 +526,14 @@
     let timerCierreShowdown = null;
     let intervalContador = null;
 
-    // Control de animación del reparto de cartas comunitarias
     let cartasPrevias = 0;
     let primeraCargaCartas = true;
+
+    let fichasPreviasPorId = {};
+    let primeraCargaFichas = true;
+
+    const POZO_X = 475;
+    const POZO_Y = 157;
 
     function cargarSocketIoYArrancar() {
       const script = document.createElement('script');
@@ -470,6 +593,60 @@
       return div;
     }
 
+    function posicionAsientoPx(indiceAsiento, totalAsientos, radioX, radioY) {
+      const centroX = 400, centroY = 225;
+      const offsetRotacion = 10;
+      const anguloGrados = indiceAsiento * (360 / totalAsientos) + offsetRotacion;
+      const anguloRadianes = anguloGrados * (Math.PI / 180);
+      return {
+        x: centroX + radioX * Math.cos(anguloRadianes),
+        y: centroY + radioY * Math.sin(anguloRadianes)
+      };
+    }
+
+    function calcularCapasPozo(monto) {
+      if (!monto || monto <= 0) return 0;
+      return Math.min(16, Math.max(2, Math.ceil(monto / 25)));
+    }
+
+    function distribuirEnEscalera(total, columnas) {
+      columnas = columnas || 4;
+      const base = Math.floor(total / columnas);
+      const resto = total % columnas;
+      const resultado = [];
+      for (let i = 0; i < columnas; i++) {
+        const extra = i >= (columnas - resto) ? 1 : 0;
+        resultado.push(base + extra);
+      }
+      return resultado;
+    }
+
+    function crearCapaEstatica() {
+      const ficha = document.createElement('div');
+      ficha.className = 'ficha-capa';
+      return ficha;
+    }
+
+    function lanzarFichasViajeras(origen, destino, cantidad) {
+      cantidad = cantidad || 3;
+      const mesa = document.querySelector('.mesa');
+      const dx = destino.x - origen.x;
+      const dy = destino.y - origen.y;
+
+      for (let i = 0; i < cantidad; i++) {
+        const ficha = document.createElement('div');
+        ficha.className = 'ficha-viajera';
+        ficha.style.left = origen.x + 'px';
+        ficha.style.top = origen.y + 'px';
+        ficha.style.setProperty('--dx', dx + 'px');
+        ficha.style.setProperty('--dy', dy + 'px');
+        ficha.style.animationDelay = (i * 0.07) + 's';
+        mesa.appendChild(ficha);
+
+        setTimeout(() => ficha.remove(), 700 + i * 70);
+      }
+    }
+
     function crearAsientos(totalAsientos, estado) {
       const contenedor = document.getElementById('asientos');
       contenedor.innerHTML = '';
@@ -497,8 +674,13 @@
           if (jugador.asiento === estado.miAsiento) asientoDiv.className += ' principal';
 
           asientoDiv.innerHTML = `
-            <div class="nombre-jugador">${jugador.nombre}</div>
-            <div class="fichas-jugador">$${jugador.fichas}</div>
+            <div class="fila-jugador">
+              <div class="info-jugador">
+                <div class="nombre-jugador">${jugador.nombre}</div>
+                <div class="fichas-jugador">$${jugador.fichas}</div>
+              </div>
+              <div class="avatar-jugador">👤</div>
+            </div>
           `;
 
           const contenedorCartas = document.createElement('div');
@@ -517,13 +699,64 @@
           });
 
           asientoDiv.appendChild(contenedorCartas);
+          contenedor.appendChild(asientoDiv);
+
         } else {
           asientoDiv.className = 'asiento';
           asientoDiv.textContent = 'Vacío';
+          contenedor.appendChild(asientoDiv);
         }
-
-        contenedor.appendChild(asientoDiv);
       }
+    }
+
+    function renderFichas(estadoOriginal, jugadoresMapeados) {
+      const totalAsientos = 9;
+
+      let origenContribuyente = null;
+      let idGanadorEsteRender = null;
+
+      if (!primeraCargaFichas) {
+        for (const j of estadoOriginal.jugadores) {
+          const antes = fichasPreviasPorId[j.id];
+          if (antes === undefined) continue;
+          if (j.fichas < antes) origenContribuyente = j.id;
+          else if (j.fichas > antes) idGanadorEsteRender = j.id;
+        }
+      }
+
+      const contenedorPozo = document.getElementById('fichas-pozo');
+      contenedorPozo.innerHTML = '';
+      const totalCapas = calcularCapasPozo(estadoOriginal.pozo);
+      const columnas = distribuirEnEscalera(totalCapas, 4);
+
+      columnas.forEach(cantidad => {
+        const columnaDiv = document.createElement('div');
+        columnaDiv.className = 'columna-fichas';
+        for (let i = 0; i < cantidad; i++) {
+          columnaDiv.appendChild(crearCapaEstatica());
+        }
+        contenedorPozo.appendChild(columnaDiv);
+      });
+
+      if (origenContribuyente !== null) {
+        const jOrigen = jugadoresMapeados.find(jm => jm.id === origenContribuyente);
+        if (jOrigen) {
+          const pos = posicionAsientoPx(jOrigen.asiento, totalAsientos, 300, 210);
+          lanzarFichasViajeras(pos, { x: POZO_X, y: POZO_Y });
+        }
+      }
+
+      if (idGanadorEsteRender !== null) {
+        const jGanador = jugadoresMapeados.find(jm => jm.id === idGanadorEsteRender);
+        if (jGanador) {
+          const pos = posicionAsientoPx(jGanador.asiento, totalAsientos, 300, 210);
+          lanzarFichasViajeras({ x: POZO_X, y: POZO_Y }, pos);
+        }
+      }
+
+      fichasPreviasPorId = {};
+      estadoOriginal.jugadores.forEach(j => { fichasPreviasPorId[j.id] = j.fichas; });
+      primeraCargaFichas = false;
     }
 
     function actualizarPozo(monto) {
@@ -548,7 +781,6 @@
 
           const esCartaNueva = !primeraCargaCartas && i >= cartasPrevias;
           if (esCartaNueva) {
-            // Calculamos cuánto debe viajar la carta desde el mazo (arriba-centro) hasta su lugar
             const dx = 116 - (58 * i);
             const dy = -120;
             cartaDiv.style.setProperty('--dx', dx + 'px');
@@ -593,6 +825,7 @@
       const jugadoresMapeados = estado.jugadores.map((j) => {
         if (j.id === MI_JUGADOR_ID) {
           return {
+            id: j.id,
             asiento: 2,
             nombre: 'Tú',
             fichas: j.fichas,
@@ -603,8 +836,9 @@
         } else {
           const otroIndex = otrosJugadores.findIndex(o => o.id === j.id);
           return {
+            id: j.id,
             asiento: asientosOtros[otroIndex],
-            nombre: `Jugador ${j.id}`,
+            nombre: `Usuario ${j.id}`,
             fichas: j.fichas,
             esTurno: estado.jugadores[estado.turnoActual].id === j.id,
             cartas: j.cartas,
@@ -624,6 +858,7 @@
       crearAsientos(totalAsientos, estadoFinal);
       actualizarPozo(estadoFinal.pozo);
       renderCartasComunitarias(estadoFinal.cartasComunitarias);
+      renderFichas(estado, jugadoresMapeados);
       actualizarBotones(estado);
       mostrarShowdown(estado);
     }
@@ -663,7 +898,7 @@
     async function ejecutarAccion(accion) {
       if (!partidaId) return;
       try {
-        const respuesta = await fetch(`${API_URL}/partida/${partidaId}/accion`, {
+        await fetch(`${API_URL}/partida/${partidaId}/accion`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -671,9 +906,6 @@
           },
           body: JSON.stringify({ accion, monto: 50 })
         });
-        const datos = await respuesta.json();
-        // No dibujamos acá — el WebSocket ('estadoActualizado') se encarga
-        // de actualizar la mesa para todos, incluido quien acaba de actuar.
       } catch (error) {
         console.error('Error ejecutando acción:', error);
       }
@@ -696,12 +928,12 @@
       modal.classList.remove('oculto');
 
       if (estado.ganador) {
-        const jugadorGanador = estado.jugadores[estado.ganador.jugador - 1];
+        const jugadorGanador = estado.jugadores.find(j => j.id === estado.ganador.jugador);
         const esYo = jugadorGanador && jugadorGanador.id === MI_JUGADOR_ID;
 
         document.getElementById('texto-ganador').textContent = esYo
           ? '🏆 ¡Ganaste!'
-          : `Ganó el Jugador ${estado.ganador.jugador}`;
+          : `Ganó el ${estado.ganador.jugador === MI_JUGADOR_ID ? 'Tú' : 'Usuario ' + estado.ganador.jugador}`;
         document.getElementById('texto-mano').textContent =
           estado.ganador.evaluacion.nombre;
 

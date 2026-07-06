@@ -133,7 +133,7 @@ app.post('/partida/nueva', (req, res) => {
 // Ruta: ejecutar una acción en una partida existente
 app.post('/partida/:id/accion', (req, res) => {
   const { id } = req.params;
-  const { accion, monto } = req.body; // accion: 'fold' | 'check' | 'bet'
+  const { accion, monto } = req.body;
 
   const partida = partidas[id];
 
@@ -147,7 +147,6 @@ app.post('/partida/:id/accion', (req, res) => {
     jugadorActual.activo = false;
 
   } else if (accion === 'check') {
-    // Si hay una apuesta pendiente por igualar, esto funciona como "igualar" (call)
     const faltante = partida.apuestaRonda - jugadorActual.apuestaActual;
     if (faltante > 0) {
       const aPagar = Math.min(faltante, jugadorActual.fichas);
@@ -166,27 +165,31 @@ app.post('/partida/:id/accion', (req, res) => {
     jugadorActual.apuestaActual = nuevoTotal;
     partida.pozo += aPagar;
 
-    // Es una subida: todos deben reaccionar de nuevo
     partida.apuestaRonda = nuevoTotal;
     partida.ultimoAgresor = partida.turnoActual;
-    partida.accionesDesdeSubida = 1; // el propio agresor ya actuó
+    partida.accionesDesdeSubida = 1;
   }
 
-  // Pasamos al siguiente jugador activo
   const jugadoresActivos = partida.jugadores.filter(j => j.activo);
 
   if (jugadoresActivos.length === 1) {
-    // Solo queda un jugador — gana automáticamente
+    // Solo queda un jugador — gana automáticamente, sin mostrar cartas
     partida.fase = 'showdown';
+    const ganador = jugadoresActivos[0];
+    partida.ganador = {
+      jugador: ganador.id,
+      evaluacion: { rango: 0, nombre: 'Los demás se retiraron', cartas: ganador.cartas }
+    };
+    ganador.fichas += partida.pozo;
+    partida.pozo = 0;
+
   } else {
-    // Buscamos el próximo jugador activo
     let siguiente = (partida.turnoActual + 1) % partida.jugadores.length;
     while (!partida.jugadores[siguiente].activo) {
       siguiente = (siguiente + 1) % partida.jugadores.length;
     }
     partida.turnoActual = siguiente;
 
-    // Avanzamos de fase solo si todos igualaron Y todos reaccionaron
     const todosIgualaron = jugadoresActivos.every(
       j => j.apuestaActual === partida.apuestaRonda
     );
@@ -199,20 +202,26 @@ app.post('/partida/:id/accion', (req, res) => {
       else if (partida.fase === 'turn') partida.fase = 'river';
       else if (partida.fase === 'river') partida.fase = 'showdown';
 
-      // Si llegamos al showdown, calculamos el ganador
       if (partida.fase === 'showdown') {
         const cartasTablero = [
           ...partida.tablero.flop,
           partida.tablero.turn,
           partida.tablero.river
         ];
-        const manosActivas = partida.jugadores
-          .filter(j => j.activo)
-          .map(j => j.cartas);
-        partida.ganador = determinarGanador(manosActivas, cartasTablero)[0];
+
+        // Mapeamos por ID real, no por posición, para evitar pagarle al jugador equivocado
+        const idsActivos = jugadoresActivos.map(j => j.id);
+        const manosActivas = jugadoresActivos.map(j => j.cartas);
+        const resultado = determinarGanador(manosActivas, cartasTablero)[0];
+        const idGanadorReal = idsActivos[resultado.jugador - 1];
+
+        partida.ganador = { ...resultado, jugador: idGanadorReal };
+
+        const jugadorGanador = partida.jugadores.find(j => j.id === idGanadorReal);
+        jugadorGanador.fichas += partida.pozo;
+        partida.pozo = 0;
       }
 
-      // Reiniciamos apuestas para la siguiente ronda
       partida.jugadores.forEach(j => j.apuestaActual = 0);
       partida.apuestaRonda = 0;
       partida.accionesDesdeSubida = 0;
