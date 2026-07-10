@@ -107,17 +107,18 @@
       margin-top: 0;
     }
 
+    /* Grupo de varias columnas de fichas, en forma de escalera */
     .grupo-pozo {
-     position: absolute;
-     top: 157px;
-     left: 475px;
-     transform: translate(0, -50%);
-     display: flex;
-     flex-direction: row;
-     align-items: flex-end;
-     gap: 6px;
-     z-index: 25;
-}
+      position: absolute;
+      top: 157px;
+      left: 475px;
+      transform: translate(0, -50%);
+      display: flex;
+      flex-direction: row;
+      align-items: flex-end;
+      gap: 6px;
+      z-index: 25;
+    }
 
     .columna-fichas {
       display: flex;
@@ -169,13 +170,12 @@
       height: auto;
       flex-direction: column;
       gap: 4px;
-      
     }
-    
+
     .asiento.principal {
       flex-direction: column-reverse;
       transform: translate(-50%, -50%) translateY(-50px);
-  }
+    }
 
     .fila-jugador {
       display: flex;
@@ -282,6 +282,7 @@
     }
 
     .carta-mini {
+      position: relative;
       width: 24px;
       height: 34px;
       background: white;
@@ -294,6 +295,10 @@
       font-size: 10px;
     }
 
+    .carta-mini .carta-dorso-overlay {
+      border-radius: 4px;
+    }
+
     .carta-mini.roja { color: #d32f2f; }
     .carta-mini.negra { color: #1a1a1a; }
 
@@ -301,8 +306,12 @@
       background: repeating-linear-gradient(45deg, #1e3a8a, #1e3a8a 4px, #2563eb 4px, #2563eb 8px);
       border: 1px solid rgba(255,255,255,0.4);
     }
-     
-     .asiento.principal .cartas-jugador .carta-mini {
+
+    .carta-mini.nueva {
+      animation: deslizarCarta 0.4s ease-out forwards;
+    }
+
+    .asiento.principal .cartas-jugador .carta-mini {
       width: 50px;
       height: 70px;
       font-size: 16px;
@@ -314,12 +323,6 @@
 
     .asiento.principal .cartas-jugador .carta-mini .palo-mini {
       font-size: 16px;
-    } 
-
-    .asiento.principal .carta-mini {
-      width: 28px;
-      height: 40px;
-      font-size: 11px;
     }
 
     .acciones {
@@ -532,8 +535,15 @@
     let fichasPreviasPorId = {};
     let primeraCargaFichas = true;
 
+    // Control de la animación de reparto inicial de manos
+    let primeraCargaManos = true;
+    let animandoReparto = false;
+
     const POZO_X = 475;
     const POZO_Y = 157;
+
+    const MAZO_X = 400;
+    const MAZO_Y = 105;
 
     function cargarSocketIoYArrancar() {
       const script = document.createElement('script');
@@ -647,7 +657,7 @@
       }
     }
 
-    function crearAsientos(totalAsientos, estado) {
+    function crearAsientos(totalAsientos, estado, sinCartas) {
       const contenedor = document.getElementById('asientos');
       contenedor.innerHTML = '';
       const centroX = 400;
@@ -685,18 +695,22 @@
 
           const contenedorCartas = document.createElement('div');
           contenedorCartas.className = 'cartas-jugador';
-          const esShowdown = (estado.fase === 'showdown');
-          const esMiAsiento = (jugador.asiento === estado.miAsiento) || esShowdown;
+          contenedorCartas.id = `cartas-jugador-${jugador.id}`;
 
-          jugador.cartas.forEach(carta => {
-            if (esMiAsiento) {
-              contenedorCartas.appendChild(crearCartaHTML(carta));
-            } else {
-              const reverso = document.createElement('div');
-              reverso.className = 'carta-mini reverso';
-              contenedorCartas.appendChild(reverso);
-            }
-          });
+          if (!sinCartas) {
+            const esShowdown = (estado.fase === 'showdown');
+            const esMiAsiento = (jugador.asiento === estado.miAsiento) || esShowdown;
+
+            jugador.cartas.forEach(carta => {
+              if (esMiAsiento) {
+                contenedorCartas.appendChild(crearCartaHTML(carta));
+              } else {
+                const reverso = document.createElement('div');
+                reverso.className = 'carta-mini reverso';
+                contenedorCartas.appendChild(reverso);
+              }
+            });
+          }
 
           asientoDiv.appendChild(contenedorCartas);
           contenedor.appendChild(asientoDiv);
@@ -707,6 +721,61 @@
           contenedor.appendChild(asientoDiv);
         }
       }
+    }
+
+    // Anima una carta individual viajando desde el mazo hasta el asiento de un jugador
+    function animarCartaHaciaAsiento(jugadorMapeado, indiceCarta, totalAsientos) {
+      const contenedor = document.getElementById(`cartas-jugador-${jugadorMapeado.id}`);
+      if (!contenedor) return;
+
+      const posAsiento = posicionAsientoPx(jugadorMapeado.asiento, totalAsientos, 380, 270);
+      const dx = MAZO_X - posAsiento.x;
+      const dy = MAZO_Y - posAsiento.y;
+
+      const esMio = jugadorMapeado.id === MI_JUGADOR_ID;
+      const div = document.createElement('div');
+
+      if (esMio) {
+        const cartaReal = jugadorMapeado.cartas[indiceCarta];
+        const esRoja = (cartaReal.palo === '♥' || cartaReal.palo === '♦');
+        div.className = 'carta-mini nueva' + (esRoja ? ' roja' : ' negra');
+        div.innerHTML = `
+          <div class="valor-mini">${cartaReal.valor}</div>
+          <div class="palo-mini">${cartaReal.palo}</div>
+        `;
+        const overlay = document.createElement('div');
+        overlay.className = 'carta-dorso-overlay';
+        div.appendChild(overlay);
+      } else {
+        div.className = 'carta-mini reverso nueva';
+      }
+
+      div.style.setProperty('--dx', dx + 'px');
+      div.style.setProperty('--dy', dy + 'px');
+      contenedor.appendChild(div);
+    }
+
+    // Reparte las manos: 2 rondas, una carta a la vez para cada jugador
+    function animarRepartoInicial(estado, jugadoresMapeados, totalAsientos, estadoFinal) {
+      const orden = [];
+      for (let ronda = 0; ronda < 2; ronda++) {
+        jugadoresMapeados.forEach(j => orden.push({ jugador: j, indiceCarta: ronda }));
+      }
+
+      let i = 0;
+      function repartirSiguiente() {
+        if (i >= orden.length) {
+          animandoReparto = false;
+          crearAsientos(totalAsientos, estadoFinal);
+          actualizarBotones(estado);
+          return;
+        }
+        const { jugador, indiceCarta } = orden[i];
+        animarCartaHaciaAsiento(jugador, indiceCarta, totalAsientos);
+        i++;
+        setTimeout(repartirSiguiente, 220);
+      }
+      repartirSiguiente();
     }
 
     function renderFichas(estadoOriginal, jugadoresMapeados) {
@@ -804,6 +873,12 @@
 
     function actualizarBotones(estado) {
       const acciones = document.getElementById('acciones');
+
+      if (animandoReparto) {
+        acciones.classList.add('oculto');
+        return;
+      }
+
       const jugadorActual = estado.jugadores[estado.turnoActual];
       if (estado.fase === 'showdown') {
         acciones.classList.add('oculto');
@@ -855,12 +930,22 @@
         jugadores: jugadoresMapeados
       };
 
-      crearAsientos(totalAsientos, estadoFinal);
+      const esPrimeraManoPreflop = primeraCargaManos && estado.fase === 'preflop';
+      if (esPrimeraManoPreflop) {
+        animandoReparto = true;
+        primeraCargaManos = false;
+      }
+
+      crearAsientos(totalAsientos, estadoFinal, esPrimeraManoPreflop);
       actualizarPozo(estadoFinal.pozo);
       renderCartasComunitarias(estadoFinal.cartasComunitarias);
       renderFichas(estado, jugadoresMapeados);
       actualizarBotones(estado);
       mostrarShowdown(estado);
+
+      if (esPrimeraManoPreflop) {
+        animarRepartoInicial(estado, jugadoresMapeados, totalAsientos, estadoFinal);
+      }
     }
 
     async function cargarPartida() {
