@@ -75,6 +75,20 @@
       font-weight: bold;
       font-size: 18px;
     }
+      .texto-siguiente-mano {
+       position: absolute;
+       top: 275px;
+       left: 50%;
+       transform: translate(-50%, 0);
+       color: #ffd700;
+       font-size: 13px;
+       font-weight: bold;
+       z-index: 22;
+     }
+
+     .texto-siguiente-mano.oculto {
+       display: none;
+      }
 
     /* --- FICHAS DE CASINO --- */
     .ficha-capa, .ficha-viajera {
@@ -489,6 +503,7 @@
       <div class="carta-placeholder"></div>
       <div class="carta-placeholder"></div>
       <div class="carta-placeholder"></div>
+      <div class="texto-siguiente-mano oculto" id="texto-siguiente-mano"></div>
     </div>
 
     <div class="asientos" id="asientos"></div>
@@ -528,6 +543,7 @@
     let showdownMostrado = false;
     let timerCierreShowdown = null;
     let intervalContador = null;
+    let intervalSiguienteMano = null;
 
     let cartasPrevias = 0;
     let primeraCargaCartas = true;
@@ -998,6 +1014,7 @@
 
     function mostrarShowdown(estado) {
   const modal = document.getElementById('overlay-ganador');
+  const textoSiguiente = document.getElementById('texto-siguiente-mano');
 
   if (estado.fase === 'terminado') {
     modal.classList.remove('oculto');
@@ -1005,14 +1022,18 @@
     document.getElementById('texto-ganador').textContent = '🏁 Juego terminado';
     document.getElementById('texto-mano').textContent = 'No quedan suficientes jugadores para continuar';
     document.getElementById('cartas-ganadoras').innerHTML = '';
+    if (textoSiguiente) textoSiguiente.classList.add('oculto');
+    if (intervalSiguienteMano) clearInterval(intervalSiguienteMano);
     return;
   }
 
   if (estado.fase !== 'showdown') {
     modal.classList.add('oculto');
+    if (textoSiguiente) textoSiguiente.classList.add('oculto');
     showdownMostrado = false;
     if (timerCierreShowdown) clearTimeout(timerCierreShowdown);
     if (intervalContador) clearInterval(intervalContador);
+    if (intervalSiguienteMano) clearInterval(intervalSiguienteMano);
     return;
   }
 
@@ -1054,6 +1075,23 @@
   }, 1000);
 
   timerCierreShowdown = setTimeout(cerrarModalGanador, 15000);
+
+  // Contador independiente, sigue corriendo aunque el modal se cierre manualmente
+  if (textoSiguiente) {
+    let segundosSiguiente = 15;
+    textoSiguiente.classList.remove('oculto');
+    textoSiguiente.textContent = `Siguiente mano en ${segundosSiguiente}s`;
+
+    intervalSiguienteMano = setInterval(() => {
+      segundosSiguiente--;
+      if (segundosSiguiente > 0) {
+        textoSiguiente.textContent = `Siguiente mano en ${segundosSiguiente}s`;
+      } else {
+        textoSiguiente.textContent = `Repartiendo...`;
+        clearInterval(intervalSiguienteMano);
+      }
+    }, 1000);
+  }
 }
 
     function cerrarModalGanador() {
