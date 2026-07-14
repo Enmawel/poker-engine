@@ -997,55 +997,64 @@
     }
 
     function mostrarShowdown(estado) {
-      const modal = document.getElementById('overlay-ganador');
+  const modal = document.getElementById('overlay-ganador');
 
-      if (estado.fase !== 'showdown') {
-        modal.classList.add('oculto');
-        showdownMostrado = false;
-        if (timerCierreShowdown) clearTimeout(timerCierreShowdown);
-        if (intervalContador) clearInterval(intervalContador);
-        return;
-      }
+  if (estado.fase === 'terminado') {
+    modal.classList.remove('oculto');
+    document.getElementById('contador-cierre').textContent = '';
+    document.getElementById('texto-ganador').textContent = '🏁 Juego terminado';
+    document.getElementById('texto-mano').textContent = 'No quedan suficientes jugadores para continuar';
+    document.getElementById('cartas-ganadoras').innerHTML = '';
+    return;
+  }
 
-      if (showdownMostrado) return;
-      showdownMostrado = true;
+  if (estado.fase !== 'showdown') {
+    modal.classList.add('oculto');
+    showdownMostrado = false;
+    if (timerCierreShowdown) clearTimeout(timerCierreShowdown);
+    if (intervalContador) clearInterval(intervalContador);
+    return;
+  }
 
-      modal.classList.remove('oculto');
+  if (showdownMostrado) return;
+  showdownMostrado = true;
 
-      if (estado.ganador) {
-        const jugadorGanador = estado.jugadores.find(j => j.id === estado.ganador.jugador);
-        const esYo = jugadorGanador && jugadorGanador.id === MI_JUGADOR_ID;
+  modal.classList.remove('oculto');
 
-        document.getElementById('texto-ganador').textContent = esYo
-          ? '🏆 ¡Ganaste!'
-          : `Ganó el ${estado.ganador.jugador === MI_JUGADOR_ID ? 'Tú' : 'Usuario ' + estado.ganador.jugador}`;
-        document.getElementById('texto-mano').textContent =
-          estado.ganador.evaluacion.nombre;
+  if (estado.ganador) {
+    const jugadorGanador = estado.jugadores.find(j => j.id === estado.ganador.jugador);
+    const esYo = jugadorGanador && jugadorGanador.id === MI_JUGADOR_ID;
 
-        const contenedorCartas = document.getElementById('cartas-ganadoras');
-        contenedorCartas.innerHTML = '';
-        estado.ganador.evaluacion.cartas.forEach(carta => {
-          contenedorCartas.appendChild(crearCartaModalHTML(carta));
-        });
+    document.getElementById('texto-ganador').textContent = esYo
+      ? '🏆 ¡Ganaste!'
+      : `Ganó el ${estado.ganador.jugador === MI_JUGADOR_ID ? 'Tú' : 'Usuario ' + estado.ganador.jugador}`;
+    document.getElementById('texto-mano').textContent =
+      estado.ganador.evaluacion.nombre;
 
-        if (esYo) {
-          lanzarConfeti();
-        }
-      }
+    const contenedorCartas = document.getElementById('cartas-ganadoras');
+    contenedorCartas.innerHTML = '';
+    estado.ganador.evaluacion.cartas.forEach(carta => {
+      contenedorCartas.appendChild(crearCartaModalHTML(carta));
+    });
 
-      let segundosRestantes = 15;
-      document.getElementById('contador-cierre').textContent = segundosRestantes;
-
-      intervalContador = setInterval(() => {
-        segundosRestantes--;
-        document.getElementById('contador-cierre').textContent = segundosRestantes;
-        if (segundosRestantes <= 0) {
-          clearInterval(intervalContador);
-        }
-      }, 1000);
-
-      timerCierreShowdown = setTimeout(cerrarModalGanador, 15000);
+    if (esYo) {
+      lanzarConfeti();
     }
+  }
+
+  let segundosRestantes = 15;
+  document.getElementById('contador-cierre').textContent = segundosRestantes;
+
+  intervalContador = setInterval(() => {
+    segundosRestantes--;
+    document.getElementById('contador-cierre').textContent = segundosRestantes;
+    if (segundosRestantes <= 0) {
+      clearInterval(intervalContador);
+    }
+  }, 1000);
+
+  timerCierreShowdown = setTimeout(cerrarModalGanador, 15000);
+}
 
     function cerrarModalGanador() {
       document.getElementById('overlay-ganador').classList.add('oculto');

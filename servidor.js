@@ -20,7 +20,7 @@ const logs = [];
 const partidas = {};
 
 function generarId() {
-  return Math.random().toString(36).substring(2, 9); // ej: "x7k2m9q"
+  return Math.random().toString(36).substring(2, 9);
 }
 
 function registrarLog(cliente, ruta, estado) {
@@ -65,6 +65,95 @@ app.use('/mazo', autenticar);
 
 const { crearMazo, barajar, repartir, repartirTablero, determinarGanador, evaluarMano } = require('./motor');
 
+// --- Helpers de rotación de ciegas y siguiente mano ---
+
+function siguienteEnJuego(partida, desdeIndice) {
+  let i = desdeIndice;
+  let vueltas = 0;
+  do {
+    i = (i + 1) % partida.jugadores.length;
+    vueltas++;
+    if (vueltas > partida.jugadores.length) return null; // nadie más en juego
+  } while (!partida.jugadores[i].enJuego);
+  return i;
+}
+
+function eliminarSinFichas(partida) {
+  partida.jugadores.forEach(j => {
+    if (j.enJuego && j.fichas <= 0) {
+      j.enJuego = false;
+    }
+  });
+}
+
+function nuevaMano(partida) {
+  const jugadoresEnJuego = partida.jugadores.filter(j => j.enJuego);
+
+  if (jugadoresEnJuego.length < 2) {
+    partida.fase = 'terminado';
+    return;
+  }
+
+  // Rotamos el dealer al siguiente jugador en juego
+  partida.indiceDealer = siguienteEnJuego(partida, partida.indiceDealer);
+
+  const idxCiegaChica = siguienteEnJuego(partida, partida.indiceDealer);
+  const idxCiegaGrande = siguienteEnJuego(partida, idxCiegaChica);
+
+  // Barajamos y repartimos cartas nuevas solo a quienes siguen en juego
+  const mazo = barajar(crearMazo());
+  let cursor = 0;
+
+  partida.jugadores.forEach(j => {
+    if (j.enJuego) {
+      j.cartas = [mazo[cursor], mazo[cursor + 1]];
+      cursor += 2;
+      j.activo = true;
+      j.apuestaActual = 0;
+    } else {
+      j.cartas = [];
+      j.activo = false;
+      j.apuestaActual = 0;
+    }
+  });
+
+  const mazoRestante = mazo.slice(cursor);
+  partida.tablero = repartirTablero(mazoRestante);
+
+  // Ciegas
+  const apuestaMinima = partida.apuestaMinima;
+  const jChica = partida.jugadores[idxCiegaChica];
+  const jGrande = partida.jugadores[idxCiegaGrande];
+
+  const pagoChica = Math.min(apuestaMinima / 2, jChica.fichas);
+  jChica.fichas -= pagoChica;
+  jChica.apuestaActual = pagoChica;
+
+  const pagoGrande = Math.min(apuestaMinima, jGrande.fichas);
+  jGrande.fichas -= pagoGrande;
+  jGrande.apuestaActual = pagoGrande;
+
+  partida.pozo = pagoChica + pagoGrande;
+  partida.apuestaRonda = pagoGrande;
+  partida.accionesDesdeSubida = 0;
+  partida.ultimoAgresor = null;
+  partida.ganador = null;
+  partida.fase = 'preflop';
+  partida.turnoActual = siguienteEnJuego(partida, idxCiegaGrande);
+}
+
+function programarSiguienteMano(id) {
+  setTimeout(() => {
+    const partida = partidas[id];
+    if (!partida) return;
+
+    eliminarSinFichas(partida);
+    nuevaMano(partida);
+
+    io.to(id).emit('estadoActualizado', partida);
+  }, 15000);
+}
+
 // Ruta: verificar que el servidor vive
 app.get('/', (req, res) => {
   res.json({ mensaje: 'Motor de Poker funcionando 🃏' });
@@ -98,10 +187,11 @@ app.post('/partida/nueva', (req, res) => {
     cartas: cartas,
     fichas: 1000,
     apuestaActual: 0,
-    activo: true  // false cuando hace fold
+    activo: true,
+    enJuego: true
   }));
 
-  // Ciega pequeña y ciega grande automáticas
+  // Ciega pequeña y ciega grande automáticas (jugadores 0 y 1 al arrancar)
   jugadores[0].fichas -= apuestaMinima / 2;
   jugadores[0].apuestaActual = apuestaMinima / 2;
   jugadores[1].fichas -= apuestaMinima;
@@ -114,13 +204,16 @@ app.post('/partida/nueva', (req, res) => {
     jugadores,
     tablero,
     pozo: apuestaMinima + apuestaMinima / 2,
-    turnoActual: 0 % numJugadores,
+    turnoActual: 2 % numJugadores,
     fase: 'preflop',
     apuestaMinima,
     apuestaMaxima: apuestaMinima * 4,
     apuestaRonda: apuestaMinima,
     accionesDesdeSubida: 0,
-    ultimoAgresor: null
+    ultimoAgresor: null,
+    // El dealer "inicial" es el último jugador, así la próxima rotación
+    // empieza limpia desde el jugador 0
+    indiceDealer: numJugadores - 1
   };
 
   registrarLog(req.cliente, '/partida/nueva', 200);
@@ -173,7 +266,7 @@ app.post('/partida/:id/accion', (req, res) => {
   const jugadoresActivos = partida.jugadores.filter(j => j.activo);
 
   if (jugadoresActivos.length === 1) {
-    // Solo queda un jugador — gana automáticamente, sin mostrar cartas
+    // Solo queda un jugador — gana automáticamente
     partida.fase = 'showdown';
     const ganador = jugadoresActivos[0];
     partida.ganador = {
@@ -182,6 +275,8 @@ app.post('/partida/:id/accion', (req, res) => {
     };
     ganador.fichas += partida.pozo;
     partida.pozo = 0;
+
+    programarSiguienteMano(id);
 
   } else {
     let siguiente = (partida.turnoActual + 1) % partida.jugadores.length;
@@ -209,7 +304,6 @@ app.post('/partida/:id/accion', (req, res) => {
           partida.tablero.river
         ];
 
-        // Mapeamos por ID real, no por posición, para evitar pagarle al jugador equivocado
         const idsActivos = jugadoresActivos.map(j => j.id);
         const manosActivas = jugadoresActivos.map(j => j.cartas);
         const resultado = determinarGanador(manosActivas, cartasTablero)[0];
@@ -220,6 +314,8 @@ app.post('/partida/:id/accion', (req, res) => {
         const jugadorGanador = partida.jugadores.find(j => j.id === idGanadorReal);
         jugadorGanador.fichas += partida.pozo;
         partida.pozo = 0;
+
+        programarSiguienteMano(id);
       }
 
       partida.jugadores.forEach(j => j.apuestaActual = 0);
@@ -240,16 +336,15 @@ app.post('/partida', (req, res) => {
 
   const mazo          = barajar(crearMazo());
   const manos         = repartir(mazo, numJugadores, 2);
-  const mazoRestante  = mazo.slice(numJugadores * 2); // saltamos las cartas ya repartidas
+  const mazoRestante  = mazo.slice(numJugadores * 2);
   const tablero       = repartirTablero(mazoRestante);
   const cartasTablero = [...tablero.flop, tablero.turn, tablero.river];
   const resultado     = determinarGanador(manos, cartasTablero);
 
-  // Construimos jugadores con sus cartas y datos básicos
   const jugadores = manos.map((cartas, index) => ({
     jugador: index + 1,
     cartas: cartas,
-    fichas: 1000  // fichas iniciales por defecto
+    fichas: 1000
   }));
 
   registrarLog(req.cliente, '/partida', 200);
