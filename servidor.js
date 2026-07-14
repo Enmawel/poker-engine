@@ -207,7 +207,7 @@ app.post('/partida/nueva', (req, res) => {
     turnoActual: 2 % numJugadores,
     fase: 'preflop',
     apuestaMinima,
-    apuestaMaxima: apuestaMinima * 4,
+    apuestaMaxima: null, // null = No Limit. Poner un número acá activaría el tope (Limit/Pot-Limit) por mesa.
     apuestaRonda: apuestaMinima,
     accionesDesdeSubida: 0,
     ultimoAgresor: null,
@@ -252,13 +252,28 @@ app.post('/partida/:id/accion', (req, res) => {
   } else if (accion === 'bet') {
     const incremento = monto || partida.apuestaMinima;
     const nuevoTotal = partida.apuestaRonda + incremento;
-    const aPagar = nuevoTotal - jugadorActual.apuestaActual;
+
+    if (partida.apuestaMaxima && nuevoTotal > partida.apuestaMaxima) {
+      registrarLog(req.cliente, `/partida/${id}/accion`, 400);
+      return res.status(400).json({
+        error: 'La apuesta supera el límite permitido',
+        apuestaMaxima: partida.apuestaMaxima,
+        intentado: nuevoTotal
+      });
+    }
+
+    let aPagar = nuevoTotal - jugadorActual.apuestaActual;
+
+    // Table stakes: nadie puede apostar más fichas de las que tiene
+    if (aPagar >= jugadorActual.fichas) {
+      aPagar = jugadorActual.fichas;
+    }
 
     jugadorActual.fichas -= aPagar;
-    jugadorActual.apuestaActual = nuevoTotal;
+    jugadorActual.apuestaActual += aPagar;
     partida.pozo += aPagar;
 
-    partida.apuestaRonda = nuevoTotal;
+    partida.apuestaRonda = Math.max(partida.apuestaRonda, jugadorActual.apuestaActual);
     partida.ultimoAgresor = partida.turnoActual;
     partida.accionesDesdeSubida = 1;
   }
