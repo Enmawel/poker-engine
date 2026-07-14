@@ -930,20 +930,20 @@
         jugadores: jugadoresMapeados
       };
 
-      const esPrimeraManoPreflop = primeraCargaManos && estado.fase === 'preflop';
-      if (esPrimeraManoPreflop) {
-        animandoReparto = true;
-        primeraCargaManos = false;
+      const esManoNueva = estado.fase === 'preflop' && (primeraCargaManos || cartasPrevias > 0);
+        if (esManoNueva) {
+         animandoReparto = true;
+         primeraCargaManos = false;
       }
 
-      crearAsientos(totalAsientos, estadoFinal, esPrimeraManoPreflop);
+      crearAsientos(totalAsientos, estadoFinal, esManoNuevaPreflop);
       actualizarPozo(estadoFinal.pozo);
       renderCartasComunitarias(estadoFinal.cartasComunitarias);
       renderFichas(estado, jugadoresMapeados);
       actualizarBotones(estado);
       mostrarShowdown(estado);
 
-      if (esPrimeraManoPreflop) {
+      if (esManoNuevaPreflop) {
         animarRepartoInicial(estado, jugadoresMapeados, totalAsientos, estadoFinal);
       }
     }
