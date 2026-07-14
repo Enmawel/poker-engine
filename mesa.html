@@ -936,14 +936,14 @@
          primeraCargaManos = false;
       }
 
-      crearAsientos(totalAsientos, estadoFinal, esManoNuevaPreflop);
+      crearAsientos(totalAsientos, estadoFinal, esManoNueva);
       actualizarPozo(estadoFinal.pozo);
       renderCartasComunitarias(estadoFinal.cartasComunitarias);
       renderFichas(estado, jugadoresMapeados);
       actualizarBotones(estado);
       mostrarShowdown(estado);
 
-      if (esManoNuevaPreflop) {
+      if (esManoNueva) {
         animarRepartoInicial(estado, jugadoresMapeados, totalAsientos, estadoFinal);
       }
     }
