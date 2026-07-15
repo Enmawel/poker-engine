@@ -345,8 +345,11 @@
       left: 50%;
       transform: translateX(-50%);
       display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
       gap: 12px;
       z-index: 20;
+      max-width: 520px;
     }
 
     .btn-accion {
@@ -375,8 +378,39 @@
       background: #40916c;
     }
 
+    .btn-accion.btn-allin {
+      background: #7f1d1d;
+      border-color: #ef4444;
+      color: white;
+    }
+
+    .btn-accion.btn-allin:hover {
+      background: #991b1b;
+    }
+
     .acciones.oculto {
       display: none;
+    }
+
+    .controles-apuesta {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: rgba(0,0,0,0.35);
+      border-radius: 10px;
+      padding: 8px 14px;
+    }
+
+    .controles-apuesta input[type="range"] {
+      width: 140px;
+    }
+
+    .monto-elegido {
+      color: #ffd700;
+      font-weight: bold;
+      font-size: 14px;
+      min-width: 60px;
+      text-align: center;
     }
 
     /* --- MODAL DE GANADOR --- */
@@ -523,8 +557,14 @@
 
     <div class="acciones oculto" id="acciones">
       <button class="btn-accion" onclick="ejecutarAccion('fold')">Retirarse</button>
-      <button class="btn-accion" onclick="ejecutarAccion('check')">Pasar</button>
-      <button class="btn-accion btn-bet" onclick="ejecutarAccion('bet')">Apostar $50</button>
+      <button class="btn-accion" id="btn-check-call" onclick="ejecutarCheckOCall()">Pasar</button>
+
+      <div class="controles-apuesta" id="controles-apuesta">
+        <input type="range" id="slider-apuesta" min="0" max="0" step="1" oninput="actualizarMontoSlider()">
+        <span class="monto-elegido" id="monto-elegido">$0</span>
+        <button class="btn-accion btn-bet" id="btn-subir" onclick="ejecutarSubida()">Subir</button>
+        <button class="btn-accion btn-allin" onclick="ejecutarAllIn()">All-in</button>
+      </div>
     </div>
   </div>
 
@@ -555,6 +595,9 @@
     // Control de la animación de reparto inicial de manos
     let primeraCargaManos = true;
     let animandoReparto = false;
+
+    // Guarda el último estado crudo que llegó del servidor (para calcular montos de apuesta)
+    let ultimoEstado = null;
 
     const POZO_X = 475;
     const POZO_Y = 157;
@@ -903,12 +946,58 @@
       }
       if (jugadorActual && jugadorActual.id === MI_JUGADOR_ID) {
         acciones.classList.remove('oculto');
+        actualizarControlesApuesta(estado);
       } else {
         acciones.classList.add('oculto');
       }
     }
 
+    // Ajusta el texto del botón Pasar/Igualar y el rango del slider de subida
+    function actualizarControlesApuesta(estado) {
+      const miJugador = estado.jugadores.find(j => j.id === MI_JUGADOR_ID);
+      if (!miJugador) return;
+
+      const btnCheckCall = document.getElementById('btn-check-call');
+      const faltante = estado.apuestaRonda - miJugador.apuestaActual;
+
+      btnCheckCall.textContent = faltante > 0 ? `Igualar $${faltante}` : 'Pasar';
+
+      const controlesApuesta = document.getElementById('controles-apuesta');
+
+      // Si ya no tiene fichas (está all-in), no puede subir más
+      if (miJugador.fichas <= 0) {
+        controlesApuesta.style.display = 'none';
+        return;
+      }
+      controlesApuesta.style.display = 'flex';
+
+      const totalMaximo = miJugador.apuestaActual + miJugador.fichas; // su all-in
+      const totalMinimoDeseado = estado.apuestaRonda + estado.apuestaMinima;
+      const totalMinimo = Math.min(totalMinimoDeseado, totalMaximo);
+
+      const slider = document.getElementById('slider-apuesta');
+      slider.min = totalMinimo;
+      slider.max = totalMaximo;
+      if (Number(slider.value) < totalMinimo || Number(slider.value) > totalMaximo) {
+        slider.value = totalMinimo;
+      }
+
+      actualizarMontoSlider();
+    }
+
+    // Se llama cada vez que el jugador mueve el slider
+    function actualizarMontoSlider() {
+      const slider = document.getElementById('slider-apuesta');
+      const valor = Number(slider.value);
+      const esAllIn = valor >= Number(slider.max);
+
+      document.getElementById('monto-elegido').textContent = `$${valor}`;
+      document.getElementById('btn-subir').textContent = esAllIn ? 'Subir (All-in)' : `Subir a $${valor}`;
+    }
+
     function renderEstado(estado) {
+      ultimoEstado = estado;
+
       const totalAsientos = 9;
       const asientosOtros = [6, 0, 4, 8, 1, 5, 7, 3];
 
@@ -997,7 +1086,8 @@
       }
     }
 
-    async function ejecutarAccion(accion) {
+    // Función genérica: manda cualquier acción al servidor con un monto opcional
+    async function ejecutarAccion(accion, monto) {
       if (!partidaId) return;
       try {
         await fetch(`${API_URL}/partida/${partidaId}/accion`, {
@@ -1006,11 +1096,31 @@
             'Content-Type': 'application/json',
             'x-api-key': API_KEY
           },
-          body: JSON.stringify({ accion, monto: 50 })
+          body: JSON.stringify({ accion, monto })
         });
       } catch (error) {
         console.error('Error ejecutando acción:', error);
       }
+    }
+
+    function ejecutarCheckOCall() {
+      ejecutarAccion('check');
+    }
+
+    function ejecutarSubida() {
+      if (!ultimoEstado) return;
+      const slider = document.getElementById('slider-apuesta');
+      const totalDeseado = Number(slider.value);
+      const incremento = totalDeseado - ultimoEstado.apuestaRonda;
+      ejecutarAccion('bet', incremento);
+    }
+
+    function ejecutarAllIn() {
+      if (!ultimoEstado) return;
+      const slider = document.getElementById('slider-apuesta');
+      const totalMaximo = Number(slider.max);
+      const incremento = totalMaximo - ultimoEstado.apuestaRonda;
+      ejecutarAccion('bet', incremento);
     }
 
     function mostrarShowdown(estado) {
