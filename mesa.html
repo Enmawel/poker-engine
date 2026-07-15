@@ -340,17 +340,17 @@
     }
 
     .acciones {
-      position: absolute;
-      bottom: 90px;
-      left: 50%;
-      transform: translateX(-50%);
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: center;
-      gap: 12px;
-      z-index: 20;
-      max-width: 520px;
-    }
+     position: absolute;
+     bottom: 90px;
+     left: 50%;
+     transform: translateX(-50%);
+     display: flex;
+     flex-wrap: nowrap;
+     justify-content: center;
+     gap: 10px;
+     z-index: 20;
+     max-width: 760px;
+  }
 
     .btn-accion {
       padding: 10px 24px;
@@ -393,25 +393,31 @@
     }
 
     .controles-apuesta {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      background: rgba(0,0,0,0.35);
-      border-radius: 10px;
-      padding: 8px 14px;
-    }
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(0,0,0,0.35);
+  border-radius: 10px;
+  padding: 6px 10px;
+}
 
-    .controles-apuesta input[type="range"] {
-      width: 140px;
-    }
+.controles-apuesta input[type="range"] {
+  width: 90px;
+}
 
-    .monto-elegido {
-      color: #ffd700;
-      font-weight: bold;
-      font-size: 14px;
-      min-width: 60px;
-      text-align: center;
-    }
+.controles-apuesta .btn-accion {
+  padding: 8px 14px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.monto-elegido {
+  color: #ffd700;
+  font-weight: bold;
+  font-size: 13px;
+  min-width: 45px;
+  text-align: center;
+}
 
     /* --- MODAL DE GANADOR --- */
     .modal-ganador {
@@ -992,7 +998,7 @@
       const esAllIn = valor >= Number(slider.max);
 
       document.getElementById('monto-elegido').textContent = `$${valor}`;
-      document.getElementById('btn-subir').textContent = esAllIn ? 'Subir (All-in)' : `Subir a $${valor}`;
+      document.getElementById('btn-subir').textContent = esAllIn ? 'Subir (All-in)' : `Subir $${valor}`;
     }
 
     function renderEstado(estado) {
