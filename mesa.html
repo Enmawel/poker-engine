@@ -340,17 +340,21 @@
     }
 
     .acciones {
-     position: absolute;
-     bottom: 90px;
-     left: 50%;
-     transform: translateX(-50%);
-     display: flex;
-     flex-wrap: nowrap;
-     justify-content: center;
-     gap: 10px;
-     z-index: 20;
-     max-width: 760px;
-  }
+  position: absolute;
+  bottom: 75px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  z-index: 20;
+}
+
+.fila-basicos {
+  display: flex;
+  gap: 10px;
+}
 
     .btn-accion {
       padding: 10px 24px;
@@ -562,17 +566,18 @@
     <div class="confeti-contenedor" id="confeti-contenedor"></div>
 
     <div class="acciones oculto" id="acciones">
-      <button class="btn-accion" onclick="ejecutarAccion('fold')">Retirarse</button>
-      <button class="btn-accion" id="btn-check-call" onclick="ejecutarCheckOCall()">Pasar</button>
-
-      <div class="controles-apuesta" id="controles-apuesta">
-        <input type="range" id="slider-apuesta" min="0" max="0" step="1" oninput="actualizarMontoSlider()">
-        <span class="monto-elegido" id="monto-elegido">$0</span>
-        <button class="btn-accion btn-bet" id="btn-subir" onclick="ejecutarSubida()">Subir</button>
-        <button class="btn-accion btn-allin" onclick="ejecutarAllIn()">All-in</button>
-      </div>
-    </div>
+  <div class="controles-apuesta" id="controles-apuesta">
+    <input type="range" id="slider-apuesta" min="0" max="0" step="1" oninput="actualizarMontoSlider()">
+    <span class="monto-elegido" id="monto-elegido">$0</span>
+    <button class="btn-accion btn-bet" id="btn-subir" onclick="ejecutarSubida()">Subir</button>
+    <button class="btn-accion btn-allin" onclick="ejecutarAllIn()">All-in</button>
   </div>
+
+  <div class="fila-basicos">
+    <button class="btn-accion" onclick="ejecutarAccion('fold')">Retirarse</button>
+    <button class="btn-accion" id="btn-check-call" onclick="ejecutarCheckOCall()">Pasar</button>
+  </div>
+</div>
 
   <script>
     const ES_LOCAL = (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost');
