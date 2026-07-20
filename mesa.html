@@ -25,7 +25,7 @@
 }
     .cartas-comunitarias {
       position: absolute;
-      top: 50%;
+      top: 140px;
       left: 50%;
       transform: translate(-50%, -50%);
       display: flex;
@@ -40,35 +40,35 @@
       border-radius: 6px;
     }
 
-    /* --- MAZO VISUAL (decorativo) --- */
+    /* --- MAZO VISUAL (decorativo, arriba pegado al borde) --- */
     .mazo-visual {
       position: absolute;
-      top: 70px;
+      top: 6px;
       left: 50%;
       transform: translateX(-50%);
-      width: 50px;
-      height: 70px;
+      width: 30px;
+      height: 42px;
     }
 
     .mazo-visual .carta-dorso {
       position: absolute;
       top: 0;
       left: 0;
-      width: 50px;
-      height: 70px;
-      border-radius: 6px;
-      background: repeating-linear-gradient(45deg, #1e3a8a, #1e3a8a 4px, #2563eb 4px, #2563eb 8px);
+      width: 30px;
+      height: 42px;
+      border-radius: 4px;
+      background: repeating-linear-gradient(45deg, #1e3a8a, #1e3a8a 3px, #2563eb 3px, #2563eb 6px);
       border: 1px solid rgba(255,255,255,0.4);
       box-shadow: 0 2px 4px rgba(0,0,0,0.4);
     }
 
     .mazo-visual .carta-dorso:nth-child(1) { transform: translate(0px, 0px); z-index: 3; }
-    .mazo-visual .carta-dorso:nth-child(2) { transform: translate(2px, -2px); z-index: 2; }
-    .mazo-visual .carta-dorso:nth-child(3) { transform: translate(4px, -4px); z-index: 1; }
+    .mazo-visual .carta-dorso:nth-child(2) { transform: translate(1px, -1px); z-index: 2; }
+    .mazo-visual .carta-dorso:nth-child(3) { transform: translate(2px, -2px); z-index: 1; }
 
     .pozo {
       position: absolute;
-      top: 35%;
+      top: 262px;
       left: 50%;
       transform: translate(-50%, -50%);
       color: #ffd700;
@@ -90,31 +90,27 @@
        display: none;
       }
 
-    /* --- FICHAS DE CASINO --- */
+    /* --- FICHAS DE CASINO (imágenes reales) --- */
     .ficha-capa, .ficha-viajera {
       position: relative;
-      width: 24px;
-      height: 24px;
-      border-radius: 50%;
-      background: radial-gradient(circle at 50% 42%, #e74c3c 0%, #c0392b 55%, #8e2a1f 100%);
-      border: 2px solid #ffffff;
-      box-shadow:
-        0 3px 4px rgba(0,0,0,0.6),
-        inset 0 2px 3px rgba(255,255,255,0.35),
-        inset 0 -2px 3px rgba(0,0,0,0.35);
+      width: 22px;
+      height: 25px;
+      background-size: contain;
+      background-repeat: no-repeat;
+      background-position: center;
+      filter: drop-shadow(0 2px 2px rgba(0,0,0,0.5));
     }
 
-    .ficha-capa::after,
-    .ficha-viajera::after {
-      content: '';
-      position: absolute;
-      inset: 3px;
-      border-radius: 50%;
-      border: 2px dashed rgba(255,255,255,0.85);
-    }
+    /* Colores por denominación */
+    .ficha-blanca { background-image: url('imagenes/fichas/ficha-blanca.png'); }
+    .ficha-roja   { background-image: url('imagenes/fichas/ficha-roja.png'); }
+    .ficha-verde  { background-image: url('imagenes/fichas/ficha-verde.png'); }
+    .ficha-azul   { background-image: url('imagenes/fichas/ficha-azul.png'); }
+    .ficha-negra  { background-image: url('imagenes/fichas/ficha-negra.png'); }
+    .ficha-dorada { background-image: url('imagenes/fichas/ficha-amarilla.png'); }
 
     .ficha-capa {
-      margin-top: -14px;
+      margin-top: -15px;
     }
 
     .ficha-capa:first-child {
@@ -124,9 +120,9 @@
     /* Grupo de varias columnas de fichas, en forma de escalera */
     .grupo-pozo {
       position: absolute;
-      top: 157px;
-      left: 475px;
-      transform: translate(0, -50%);
+      top: 220px;
+      left: 50%;
+      transform: translate(-50%, -50%);
       display: flex;
       flex-direction: row;
       align-items: flex-end;
@@ -610,11 +606,11 @@
     // Guarda el último estado crudo que llegó del servidor (para calcular montos de apuesta)
     let ultimoEstado = null;
 
-    const POZO_X = 475;
-    const POZO_Y = 157;
+    const POZO_X = 400;
+    const POZO_Y = 220;
 
     const MAZO_X = 400;
-    const MAZO_Y = 105;
+    const MAZO_Y = 27;
 
     function cargarSocketIoYArrancar() {
       const script = document.createElement('script');
@@ -624,6 +620,9 @@
 
         socket.on('connect', () => {
           console.log('WebSocket conectado:', socket.id);
+          if (partidaId) {
+            socket.emit('unirse', partidaId);
+          }
         });
 
         socket.on('estadoActualizado', (estado) => {
@@ -702,13 +701,26 @@
       return resultado;
     }
 
-    function crearCapaEstatica() {
+    // Elige la clase de color de ficha según el monto (como las denominaciones reales de casino)
+    function claseColorFicha(monto) {
+      if (monto < 50)   return 'ficha-blanca';
+      if (monto < 150)  return 'ficha-roja';
+      if (monto < 350)  return 'ficha-verde';
+      if (monto < 750)  return 'ficha-azul';
+      if (monto < 1500) return 'ficha-negra';
+      return 'ficha-dorada';
+    }
+
+    function crearCapaEstatica(claseColor, zIndex) {
       const ficha = document.createElement('div');
-      ficha.className = 'ficha-capa';
+      ficha.className = 'ficha-capa' + (claseColor ? ' ' + claseColor : '');
+      if (zIndex !== undefined) {
+        ficha.style.zIndex = zIndex;
+      }
       return ficha;
     }
 
-    function lanzarFichasViajeras(origen, destino, cantidad) {
+    function lanzarFichasViajeras(origen, destino, cantidad, claseColor) {
       cantidad = cantidad || 3;
       const mesa = document.querySelector('.mesa');
       const dx = destino.x - origen.x;
@@ -716,7 +728,7 @@
 
       for (let i = 0; i < cantidad; i++) {
         const ficha = document.createElement('div');
-        ficha.className = 'ficha-viajera';
+        ficha.className = 'ficha-viajera' + (claseColor ? ' ' + claseColor : '');
         ficha.style.left = origen.x + 'px';
         ficha.style.top = origen.y + 'px';
         ficha.style.setProperty('--dx', dx + 'px');
@@ -826,11 +838,12 @@
       contenedor.appendChild(div);
     }
 
-    // Reparte las manos: 2 rondas, una carta a la vez para cada jugador
+    // Reparte las manos: 2 rondas, una carta a la vez, solo a jugadores con fichas
     function animarRepartoInicial(estado, jugadoresMapeados, totalAsientos, estadoFinal) {
+      const jugadoresConFichas = jugadoresMapeados.filter(j => j.fichas > 0);
       const orden = [];
       for (let ronda = 0; ronda < 2; ronda++) {
-        jugadoresMapeados.forEach(j => orden.push({ jugador: j, indiceCarta: ronda }));
+        jugadoresConFichas.forEach(j => orden.push({ jugador: j, indiceCarta: ronda }));
       }
 
       let i = 0;
@@ -854,35 +867,28 @@
 
       let origenContribuyente = null;
       let idGanadorEsteRender = null;
+      let montoContribuido = 0;
+      let montoGanado = 0;
 
       if (!primeraCargaFichas) {
         for (const j of estadoOriginal.jugadores) {
           const antes = fichasPreviasPorId[j.id];
           if (antes === undefined) continue;
-          if (j.fichas < antes) origenContribuyente = j.id;
-          else if (j.fichas > antes) idGanadorEsteRender = j.id;
+          if (j.fichas < antes) {
+            origenContribuyente = j.id;
+            montoContribuido = antes - j.fichas;
+          } else if (j.fichas > antes) {
+            idGanadorEsteRender = j.id;
+            montoGanado = j.fichas - antes;
+          }
         }
       }
-
-      const contenedorPozo = document.getElementById('fichas-pozo');
-      contenedorPozo.innerHTML = '';
-      const totalCapas = calcularCapasPozo(estadoOriginal.pozo);
-      const columnas = distribuirEnEscalera(totalCapas, 4);
-
-      columnas.forEach(cantidad => {
-        const columnaDiv = document.createElement('div');
-        columnaDiv.className = 'columna-fichas';
-        for (let i = 0; i < cantidad; i++) {
-          columnaDiv.appendChild(crearCapaEstatica());
-        }
-        contenedorPozo.appendChild(columnaDiv);
-      });
 
       if (origenContribuyente !== null) {
         const jOrigen = jugadoresMapeados.find(jm => jm.id === origenContribuyente);
         if (jOrigen) {
           const pos = posicionAsientoPx(jOrigen.asiento, totalAsientos, 300, 210);
-          lanzarFichasViajeras(pos, { x: POZO_X, y: POZO_Y });
+          lanzarFichasViajeras(pos, { x: POZO_X, y: POZO_Y }, 3, claseColorFicha(montoContribuido));
         }
       }
 
@@ -890,9 +896,25 @@
         const jGanador = jugadoresMapeados.find(jm => jm.id === idGanadorEsteRender);
         if (jGanador) {
           const pos = posicionAsientoPx(jGanador.asiento, totalAsientos, 300, 210);
-          lanzarFichasViajeras({ x: POZO_X, y: POZO_Y }, pos);
+          const cantidadVolando = Math.min(14, Math.max(5, Math.ceil(montoGanado / 60)));
+          lanzarFichasViajeras({ x: POZO_X, y: POZO_Y }, pos, cantidadVolando, claseColorFicha(montoGanado));
         }
       }
+
+      const contenedorPozo = document.getElementById('fichas-pozo');
+      contenedorPozo.innerHTML = '';
+      const columnas = [1, 2, 3, 4]; // negra, azul, verde, roja
+      const PALETA_POZO = ['ficha-negra', 'ficha-azul', 'ficha-verde', 'ficha-roja'];
+
+      columnas.forEach((cantidad, indiceColumna) => {
+        const columnaDiv = document.createElement('div');
+        columnaDiv.className = 'columna-fichas';
+        const color = PALETA_POZO[indiceColumna % PALETA_POZO.length];
+        for (let i = 0; i < cantidad; i++) {
+          columnaDiv.appendChild(crearCapaEstatica(color, cantidad - i));
+        }
+        contenedorPozo.appendChild(columnaDiv);
+      });
 
       fichasPreviasPorId = {};
       estadoOriginal.jugadores.forEach(j => { fichasPreviasPorId[j.id] = j.fichas; });

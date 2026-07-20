@@ -162,5 +162,5 @@ function determinarGanador(manos, cartasTablero) {
 // --- EXPORTAR FUNCIONES ---
 module.exports = {
   crearMazo, barajar, repartir,
-  repartirTablero, determinarGanador, evaluarMano
+  repartirTablero, determinarGanador, evaluarMano, valorNumerico
 };

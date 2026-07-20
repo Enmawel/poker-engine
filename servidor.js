@@ -63,7 +63,7 @@ app.use('/partida', autenticar);
 app.use('/mano', autenticar);
 app.use('/mazo', autenticar);
 
-const { crearMazo, barajar, repartir, repartirTablero, determinarGanador, evaluarMano } = require('./motor');
+const { crearMazo, barajar, repartir, repartirTablero, determinarGanador, evaluarMano, valorNumerico } = require('./motor');
 
 // --- Helpers de rotación de ciegas y siguiente mano ---
 
@@ -140,6 +140,7 @@ function nuevaMano(partida) {
   partida.ganador = null;
   partida.fase = 'preflop';
   partida.turnoActual = siguienteEnJuego(partida, idxCiegaGrande);
+  partida.subidasEnRonda = 0;
 }
 
 function programarSiguienteMano(id) {
@@ -151,7 +152,228 @@ function programarSiguienteMano(id) {
     nuevaMano(partida);
 
     io.to(id).emit('estadoActualizado', partida);
+
+    procesarTurnosBot(id);
   }, 15000);
+}
+
+// --- LÓGICA DE ACCIÓN (reusable por jugadores humanos y bots) ---
+// Aplica una acción (fold/check/bet) sobre el jugador que tiene el turno actual.
+// Muta "partida" directamente. Si la acción es inválida, devuelve { error, ... } sin tocar el estado.
+function procesarAccion(partida, accion, monto) {
+  const jugadorActual = partida.jugadores[partida.turnoActual];
+
+  if (accion === 'fold') {
+    jugadorActual.activo = false;
+
+  } else if (accion === 'check') {
+    const faltante = partida.apuestaRonda - jugadorActual.apuestaActual;
+    if (faltante > 0) {
+      const aPagar = Math.min(faltante, jugadorActual.fichas);
+      jugadorActual.fichas -= aPagar;
+      jugadorActual.apuestaActual += aPagar;
+      partida.pozo += aPagar;
+    }
+    partida.accionesDesdeSubida = (partida.accionesDesdeSubida || 0) + 1;
+
+  } else if (accion === 'bet') {
+    const incremento = monto || partida.apuestaMinima;
+    const nuevoTotal = partida.apuestaRonda + incremento;
+
+    if (partida.apuestaMaxima && nuevoTotal > partida.apuestaMaxima) {
+      return {
+        error: 'La apuesta supera el límite permitido',
+        apuestaMaxima: partida.apuestaMaxima,
+        intentado: nuevoTotal
+      };
+    }
+
+    let aPagar = nuevoTotal - jugadorActual.apuestaActual;
+
+    // Table stakes: nadie puede apostar más fichas de las que tiene
+    if (aPagar >= jugadorActual.fichas) {
+      aPagar = jugadorActual.fichas;
+    }
+
+    jugadorActual.fichas -= aPagar;
+    jugadorActual.apuestaActual += aPagar;
+    partida.pozo += aPagar;
+
+    const esSubidaReal = jugadorActual.apuestaActual > partida.apuestaRonda;
+    partida.apuestaRonda = Math.max(partida.apuestaRonda, jugadorActual.apuestaActual);
+
+    if (esSubidaReal) {
+      partida.ultimoAgresor = partida.turnoActual;
+      partida.accionesDesdeSubida = 1;
+      partida.subidasEnRonda = (partida.subidasEnRonda || 0) + 1;
+    } else {
+      // No alcanzó a subir de verdad (ej: ya estaba all-in) — cuenta como un pago más, no reinicia la ronda
+      partida.accionesDesdeSubida = (partida.accionesDesdeSubida || 0) + 1;
+    }
+  }
+
+  const jugadoresActivos = partida.jugadores.filter(j => j.activo);
+
+  if (jugadoresActivos.length === 1) {
+    // Solo queda un jugador — gana automáticamente
+    partida.fase = 'showdown';
+    const ganador = jugadoresActivos[0];
+    partida.ganador = {
+      jugador: ganador.id,
+      evaluacion: { rango: 0, nombre: 'Los demás se retiraron', cartas: ganador.cartas }
+    };
+    ganador.fichas += partida.pozo;
+    partida.pozo = 0;
+
+    programarSiguienteMano(partida.id);
+
+  } else {
+    let siguiente = (partida.turnoActual + 1) % partida.jugadores.length;
+    while (!partida.jugadores[siguiente].activo) {
+      siguiente = (siguiente + 1) % partida.jugadores.length;
+    }
+    partida.turnoActual = siguiente;
+
+    const todosIgualaron = jugadoresActivos.every(
+      j => j.apuestaActual === partida.apuestaRonda || j.fichas === 0
+    );
+    const accionesCompletas =
+      (partida.accionesDesdeSubida || 0) >= jugadoresActivos.length;
+
+    if (todosIgualaron && accionesCompletas) {
+      if (partida.fase === 'preflop') partida.fase = 'flop';
+      else if (partida.fase === 'flop') partida.fase = 'turn';
+      else if (partida.fase === 'turn') partida.fase = 'river';
+      else if (partida.fase === 'river') partida.fase = 'showdown';
+
+      if (partida.fase === 'showdown') {
+        const cartasTablero = [
+          ...partida.tablero.flop,
+          partida.tablero.turn,
+          partida.tablero.river
+        ];
+
+        const idsActivos = jugadoresActivos.map(j => j.id);
+        const manosActivas = jugadoresActivos.map(j => j.cartas);
+        const resultado = determinarGanador(manosActivas, cartasTablero)[0];
+        const idGanadorReal = idsActivos[resultado.jugador - 1];
+
+        partida.ganador = { ...resultado, jugador: idGanadorReal };
+
+        const jugadorGanador = partida.jugadores.find(j => j.id === idGanadorReal);
+        jugadorGanador.fichas += partida.pozo;
+        partida.pozo = 0;
+
+        programarSiguienteMano(partida.id);
+      }
+
+      partida.jugadores.forEach(j => j.apuestaActual = 0);
+      partida.apuestaRonda = 0;
+      partida.accionesDesdeSubida = 0;
+      partida.subidasEnRonda = 0;
+      partida.ultimoAgresor = null;
+    }
+  }
+
+  return null; // sin error
+}
+
+// --- BOTS: decisión y disparo automático de turno ---
+
+// Puntúa una mano de preflop (solo 2 cartas, sin tablero) entre 0 y 1
+function calcularFuerzaPreflop(cartas) {
+  const [c1, c2] = cartas;
+  const v1 = valorNumerico(c1);
+  const v2 = valorNumerico(c2);
+  const esPar = v1 === v2;
+  const esDelMismoPalo = c1.palo === c2.palo;
+  const promedio = (v1 + v2) / 2; // entre 2 y 14
+
+  let fuerza = (promedio - 2) / 12; // normaliza 2-14 a 0-1
+  if (esPar) fuerza += 0.35;
+  if (esDelMismoPalo) fuerza += 0.1;
+  return Math.min(1, fuerza);
+}
+
+// Puntúa la mano del jugador en cualquier fase, entre 0 y 1
+function calcularFuerzaMano(partida, jugador) {
+  if (partida.fase === 'preflop') {
+    return calcularFuerzaPreflop(jugador.cartas);
+  }
+
+  const cartasTablero = [
+    ...partida.tablero.flop,
+    ...(partida.tablero.turn ? [partida.tablero.turn] : []),
+    ...(partida.tablero.river ? [partida.tablero.river] : [])
+  ];
+
+  const evaluacion = evaluarMano(jugador.cartas, cartasTablero);
+  return evaluacion.rango / 10;
+}
+
+// Decide qué acción toma un bot según la fuerza de su mano, con algo de azar
+function decidirAccionBot(partida, jugador) {
+  if (jugador.fichas <= 0) {
+    // Ya está all-in: no tiene nada que arriesgar, se queda a ver gratis (nunca se retira sin motivo)
+    return { accion: 'check' };
+  }
+
+  const faltante = partida.apuestaRonda - jugador.apuestaActual;
+  const fuerza = calcularFuerzaMano(partida, jugador);
+  const puedeSubir = (partida.subidasEnRonda || 0) < 4; // tope de 4 subidas por ronda para bots
+
+  if (faltante <= 0) {
+    if (puedeSubir && fuerza > 0.6 && Math.random() < 0.6) {
+      return { accion: 'bet', monto: partida.apuestaMinima * (1 + Math.floor(Math.random() * 2)) };
+    }
+    return { accion: 'check' };
+  }
+
+  if (fuerza < 0.25) {
+    return Math.random() < 0.15 ? { accion: 'check' } : { accion: 'fold' };
+  }
+
+  if (fuerza < 0.6) {
+    return (puedeSubir && Math.random() >= 0.85) ? { accion: 'bet', monto: partida.apuestaMinima } : { accion: 'check' };
+  }
+
+  return (puedeSubir && Math.random() < 0.5)
+    ? { accion: 'bet', monto: partida.apuestaMinima * (1 + Math.floor(Math.random() * 3)) }
+    : { accion: 'check' };
+}
+
+// Si le toca el turno a un bot, espera un momento y actúa solo. Se encadena
+// automáticamente si el siguiente turno también es de otro bot.
+function procesarTurnosBot(id) {
+  const partida = partidas[id];
+  if (!partida) return;
+  if (partida.fase === 'showdown' || partida.fase === 'terminado') return;
+
+  const jugadorActual = partida.jugadores[partida.turnoActual];
+  if (!jugadorActual || !jugadorActual.esBot) return;
+
+  setTimeout(() => {
+    const partidaActual = partidas[id];
+    if (!partidaActual) return;
+    if (partidaActual.fase === 'showdown' || partidaActual.fase === 'terminado') return;
+
+    const jugadorQueActua = partidaActual.jugadores[partidaActual.turnoActual];
+    if (!jugadorQueActua || !jugadorQueActua.esBot) return;
+
+    const { accion, monto } = decidirAccionBot(partidaActual, jugadorQueActua);
+    let resultado = procesarAccion(partidaActual, accion, monto);
+
+    if (resultado && resultado.error) {
+      // Salvavidas: si la decisión del bot quedó inválida por algún motivo,
+      // que pase o se retire en vez de dejar la partida trabada.
+      const faltanteAhora = partidaActual.apuestaRonda - jugadorQueActua.apuestaActual;
+      procesarAccion(partidaActual, faltanteAhora > 0 ? 'fold' : 'check');
+    }
+
+    io.to(id).emit('estadoActualizado', partidaActual);
+
+    procesarTurnosBot(id);
+  }, 1500);
 }
 
 // Ruta: verificar que el servidor vive
@@ -175,6 +397,7 @@ app.get('/partida/:id', (req, res) => {
 // Ruta: crear una nueva partida con estado persistente
 app.post('/partida/nueva', (req, res) => {
   const numJugadores = req.body.jugadores || 3;
+  const soloParaTesting = req.body.soloParaTesting || false;
   const apuestaMinima = 50;
 
   const mazo = barajar(crearMazo());
@@ -188,7 +411,10 @@ app.post('/partida/nueva', (req, res) => {
     fichas: 1000,
     apuestaActual: 0,
     activo: true,
-    enJuego: true
+    enJuego: true,
+    // Modo de prueba interno: el jugador 1 es el humano, el resto son bots.
+    // Nunca se activa en partidas reales (soloParaTesting no lo manda un cliente real).
+    esBot: soloParaTesting && index !== 0
   }));
 
   // Ciega pequeña y ciega grande automáticas (jugadores 0 y 1 al arrancar)
@@ -221,6 +447,8 @@ app.post('/partida/nueva', (req, res) => {
     id,
     estado: partidas[id]
   });
+
+  procesarTurnosBot(id);
 });
 
 // Ruta: ejecutar una acción en una partida existente
@@ -234,115 +462,18 @@ app.post('/partida/:id/accion', (req, res) => {
     return res.status(404).json({ error: 'Partida no encontrada' });
   }
 
-  const jugadorActual = partida.jugadores[partida.turnoActual];
+  const resultado = procesarAccion(partida, accion, monto);
 
-  if (accion === 'fold') {
-    jugadorActual.activo = false;
-
-  } else if (accion === 'check') {
-    const faltante = partida.apuestaRonda - jugadorActual.apuestaActual;
-    if (faltante > 0) {
-      const aPagar = Math.min(faltante, jugadorActual.fichas);
-      jugadorActual.fichas -= aPagar;
-      jugadorActual.apuestaActual += aPagar;
-      partida.pozo += aPagar;
-    }
-    partida.accionesDesdeSubida = (partida.accionesDesdeSubida || 0) + 1;
-
-  } else if (accion === 'bet') {
-    const incremento = monto || partida.apuestaMinima;
-    const nuevoTotal = partida.apuestaRonda + incremento;
-
-    if (partida.apuestaMaxima && nuevoTotal > partida.apuestaMaxima) {
-      registrarLog(req.cliente, `/partida/${id}/accion`, 400);
-      return res.status(400).json({
-        error: 'La apuesta supera el límite permitido',
-        apuestaMaxima: partida.apuestaMaxima,
-        intentado: nuevoTotal
-      });
-    }
-
-    let aPagar = nuevoTotal - jugadorActual.apuestaActual;
-
-    // Table stakes: nadie puede apostar más fichas de las que tiene
-    if (aPagar >= jugadorActual.fichas) {
-      aPagar = jugadorActual.fichas;
-    }
-
-    jugadorActual.fichas -= aPagar;
-    jugadorActual.apuestaActual += aPagar;
-    partida.pozo += aPagar;
-
-    partida.apuestaRonda = Math.max(partida.apuestaRonda, jugadorActual.apuestaActual);
-    partida.ultimoAgresor = partida.turnoActual;
-    partida.accionesDesdeSubida = 1;
-  }
-
-  const jugadoresActivos = partida.jugadores.filter(j => j.activo);
-
-  if (jugadoresActivos.length === 1) {
-    // Solo queda un jugador — gana automáticamente
-    partida.fase = 'showdown';
-    const ganador = jugadoresActivos[0];
-    partida.ganador = {
-      jugador: ganador.id,
-      evaluacion: { rango: 0, nombre: 'Los demás se retiraron', cartas: ganador.cartas }
-    };
-    ganador.fichas += partida.pozo;
-    partida.pozo = 0;
-
-    programarSiguienteMano(id);
-
-  } else {
-    let siguiente = (partida.turnoActual + 1) % partida.jugadores.length;
-    while (!partida.jugadores[siguiente].activo) {
-      siguiente = (siguiente + 1) % partida.jugadores.length;
-    }
-    partida.turnoActual = siguiente;
-
-    const todosIgualaron = jugadoresActivos.every(
-      j => j.apuestaActual === partida.apuestaRonda
-    );
-    const accionesCompletas =
-      (partida.accionesDesdeSubida || 0) >= jugadoresActivos.length;
-
-    if (todosIgualaron && accionesCompletas) {
-      if (partida.fase === 'preflop') partida.fase = 'flop';
-      else if (partida.fase === 'flop') partida.fase = 'turn';
-      else if (partida.fase === 'turn') partida.fase = 'river';
-      else if (partida.fase === 'river') partida.fase = 'showdown';
-
-      if (partida.fase === 'showdown') {
-        const cartasTablero = [
-          ...partida.tablero.flop,
-          partida.tablero.turn,
-          partida.tablero.river
-        ];
-
-        const idsActivos = jugadoresActivos.map(j => j.id);
-        const manosActivas = jugadoresActivos.map(j => j.cartas);
-        const resultado = determinarGanador(manosActivas, cartasTablero)[0];
-        const idGanadorReal = idsActivos[resultado.jugador - 1];
-
-        partida.ganador = { ...resultado, jugador: idGanadorReal };
-
-        const jugadorGanador = partida.jugadores.find(j => j.id === idGanadorReal);
-        jugadorGanador.fichas += partida.pozo;
-        partida.pozo = 0;
-
-        programarSiguienteMano(id);
-      }
-
-      partida.jugadores.forEach(j => j.apuestaActual = 0);
-      partida.apuestaRonda = 0;
-      partida.accionesDesdeSubida = 0;
-      partida.ultimoAgresor = null;
-    }
+  if (resultado && resultado.error) {
+    registrarLog(req.cliente, `/partida/${id}/accion`, 400);
+    return res.status(400).json(resultado);
   }
 
   registrarLog(req.cliente, `/partida/${id}/accion`, 200);
   io.to(id).emit('estadoActualizado', partida);
   res.json({ id, estado: partida });
+
+  procesarTurnosBot(id);
 });
 
 // Ruta: jugar una partida completa
