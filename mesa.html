@@ -494,6 +494,31 @@
       justify-content: center;
     }
 
+    .bloque-bote {
+      margin-bottom: 14px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid rgba(255,255,255,0.15);
+    }
+
+    .bloque-bote:last-child {
+      border-bottom: none;
+      margin-bottom: 0;
+      padding-bottom: 0;
+    }
+
+    .titulo-bote {
+      color: #ffd700;
+      font-weight: bold;
+      font-size: 13px;
+      margin: 4px 0 2px;
+    }
+
+    .nombres-ganadores {
+      color: #9fe1cb;
+      font-size: 13px;
+      margin: 0 0 4px;
+    }
+
     /* --- CONFETI --- */
     .confeti-contenedor {
       position: absolute;
@@ -554,8 +579,7 @@
         <button class="btn-cerrar-modal" onclick="cerrarModalGanador()">✕</button>
         <div class="contador-cierre" id="contador-cierre">15</div>
         <h2 id="texto-ganador">¡Ganador!</h2>
-        <p id="texto-mano">Full House</p>
-        <div class="cartas-ganadoras" id="cartas-ganadoras"></div>
+        <div class="resultados-botes" id="resultados-botes"></div>
       </div>
     </div>
 
@@ -1165,7 +1189,7 @@
     document.getElementById('contador-cierre').textContent = '';
     document.getElementById('texto-ganador').textContent = '🏁 Juego terminado';
     document.getElementById('texto-mano').textContent = 'No quedan suficientes jugadores para continuar';
-    document.getElementById('cartas-ganadoras').innerHTML = '';
+    document.getElementById('resultados-botes').innerHTML = '';
     if (textoSiguiente) textoSiguiente.classList.add('oculto');
     if (intervalSiguienteMano) clearInterval(intervalSiguienteMano);
     return;
@@ -1186,23 +1210,56 @@
 
   modal.classList.remove('oculto');
 
-  if (estado.ganador) {
-    const jugadorGanador = estado.jugadores.find(j => j.id === estado.ganador.jugador);
-    const esYo = jugadorGanador && jugadorGanador.id === MI_JUGADOR_ID;
+  if ((estado.ganadores && estado.ganadores.length > 0) || estado.ganador) {
+    const listaBotes = (estado.ganadores && estado.ganadores.length > 0)
+      ? estado.ganadores
+      : [{ monto: null, evaluacion: estado.ganador.evaluacion, ganadores: [estado.ganador.jugador] }];
 
-    document.getElementById('texto-ganador').textContent = esYo
+    const nombreJugador = id => id === MI_JUGADOR_ID ? 'Tú' : `Usuario ${id}`;
+    const todosLosIds = listaBotes.flatMap(bote => bote.ganadores);
+    const yoGane = todosLosIds.includes(MI_JUGADOR_ID);
+
+    document.getElementById('texto-ganador').textContent = yoGane
       ? '🏆 ¡Ganaste!'
-      : `Ganó el ${estado.ganador.jugador === MI_JUGADOR_ID ? 'Tú' : 'Usuario ' + estado.ganador.jugador}`;
-    document.getElementById('texto-mano').textContent =
-      estado.ganador.evaluacion.nombre;
+      : (listaBotes.length === 1 && listaBotes[0].ganadores.length === 1
+          ? `Ganó el ${nombreJugador(listaBotes[0].ganadores[0])}`
+          : 'Resultado de la mano');
 
-    const contenedorCartas = document.getElementById('cartas-ganadoras');
-    contenedorCartas.innerHTML = '';
-    estado.ganador.evaluacion.cartas.forEach(carta => {
-      contenedorCartas.appendChild(crearCartaModalHTML(carta));
+    const contenedor = document.getElementById('resultados-botes');
+    contenedor.innerHTML = '';
+
+    listaBotes.forEach((bote, index) => {
+      const bloque = document.createElement('div');
+      bloque.className = 'bloque-bote';
+
+      if (listaBotes.length > 1) {
+        const titulo = document.createElement('p');
+        titulo.className = 'titulo-bote';
+        titulo.textContent = (index === 0 ? 'Bote principal' : `Bote lateral ${index}`) +
+          (bote.monto ? ` — $${bote.monto}` : '');
+        bloque.appendChild(titulo);
+
+        const nombres = document.createElement('p');
+        nombres.className = 'nombres-ganadores';
+        nombres.textContent = 'Ganó: ' + bote.ganadores.map(nombreJugador).join(' y ');
+        bloque.appendChild(nombres);
+      }
+
+      const nombreMano = document.createElement('p');
+      nombreMano.textContent = bote.evaluacion.nombre;
+      bloque.appendChild(nombreMano);
+
+      const cartasDiv = document.createElement('div');
+      cartasDiv.className = 'cartas-ganadoras';
+      bote.evaluacion.cartas.forEach(carta => {
+        cartasDiv.appendChild(crearCartaModalHTML(carta));
+      });
+      bloque.appendChild(cartasDiv);
+
+      contenedor.appendChild(bloque);
     });
 
-    if (esYo) {
+    if (yoGane) {
       lanzarConfeti();
     }
   }

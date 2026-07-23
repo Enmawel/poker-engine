@@ -110,10 +110,12 @@ function nuevaMano(partida) {
       cursor += 2;
       j.activo = true;
       j.apuestaActual = 0;
+      j.totalApostado = 0;
     } else {
       j.cartas = [];
       j.activo = false;
       j.apuestaActual = 0;
+      j.totalApostado = 0;
     }
   });
 
@@ -128,10 +130,12 @@ function nuevaMano(partida) {
   const pagoChica = Math.min(apuestaMinima / 2, jChica.fichas);
   jChica.fichas -= pagoChica;
   jChica.apuestaActual = pagoChica;
+  jChica.totalApostado = pagoChica;
 
   const pagoGrande = Math.min(apuestaMinima, jGrande.fichas);
   jGrande.fichas -= pagoGrande;
   jGrande.apuestaActual = pagoGrande;
+  jGrande.totalApostado = pagoGrande;
 
   partida.pozo = pagoChica + pagoGrande;
   partida.apuestaRonda = pagoGrande;
@@ -157,6 +161,39 @@ function programarSiguienteMano(id) {
   }, 15000);
 }
 
+// Arma los botes (principal + laterales) según cuánto apostó cada jugador en la mano
+// y quién sigue activo (no se retiró). Devuelve un array de { monto, elegibles }.
+function calcularBotes(partida) {
+  const contribuyentes = partida.jugadores.filter(j => (j.totalApostado || 0) > 0);
+  if (contribuyentes.length === 0) return [];
+
+  const niveles = [...new Set(contribuyentes.map(j => j.totalApostado))].sort((a, b) => a - b);
+
+  const botes = [];
+  let nivelAnterior = 0;
+
+  niveles.forEach(nivel => {
+    const enEsteNivel = contribuyentes.filter(j => j.totalApostado >= nivel);
+    const monto = (nivel - nivelAnterior) * enEsteNivel.length;
+
+    if (monto > 0) {
+      let elegibles = enEsteNivel.filter(j => j.activo).map(j => j.id);
+
+      // Salvaguarda: si nadie activo llega a este nivel (no debería pasar),
+      // repartimos entre todos los activos para no perder fichas.
+      if (elegibles.length === 0) {
+        elegibles = partida.jugadores.filter(j => j.activo).map(j => j.id);
+      }
+
+      botes.push({ monto, elegibles });
+    }
+
+    nivelAnterior = nivel;
+  });
+
+  return botes;
+}
+
 // --- LÓGICA DE ACCIÓN (reusable por jugadores humanos y bots) ---
 // Aplica una acción (fold/check/bet) sobre el jugador que tiene el turno actual.
 // Muta "partida" directamente. Si la acción es inválida, devuelve { error, ... } sin tocar el estado.
@@ -172,6 +209,7 @@ function procesarAccion(partida, accion, monto) {
       const aPagar = Math.min(faltante, jugadorActual.fichas);
       jugadorActual.fichas -= aPagar;
       jugadorActual.apuestaActual += aPagar;
+      jugadorActual.totalApostado = (jugadorActual.totalApostado || 0) + aPagar;
       partida.pozo += aPagar;
     }
     partida.accionesDesdeSubida = (partida.accionesDesdeSubida || 0) + 1;
@@ -197,6 +235,7 @@ function procesarAccion(partida, accion, monto) {
 
     jugadorActual.fichas -= aPagar;
     jugadorActual.apuestaActual += aPagar;
+    jugadorActual.totalApostado = (jugadorActual.totalApostado || 0) + aPagar;
     partida.pozo += aPagar;
 
     const esSubidaReal = jugadorActual.apuestaActual > partida.apuestaRonda;
@@ -245,6 +284,12 @@ function procesarAccion(partida, accion, monto) {
       else if (partida.fase === 'flop') partida.fase = 'turn';
       else if (partida.fase === 'turn') partida.fase = 'river';
       else if (partida.fase === 'river') partida.fase = 'showdown';
+      
+      
+
+      if (partida.fase === 'showdown') {
+        console.log('BOTES:', JSON.stringify(calcularBotes(partida)));
+      }
 
       if (partida.fase === 'showdown') {
         const cartasTablero = [
@@ -253,16 +298,51 @@ function procesarAccion(partida, accion, monto) {
           partida.tablero.river
         ];
 
-        const idsActivos = jugadoresActivos.map(j => j.id);
-        const manosActivas = jugadoresActivos.map(j => j.cartas);
-        const resultado = determinarGanador(manosActivas, cartasTablero)[0];
-        const idGanadorReal = idsActivos[resultado.jugador - 1];
+        const botes = calcularBotes(partida);
+        const resultadosPorBote = [];
 
-        partida.ganador = { ...resultado, jugador: idGanadorReal };
+        botes.forEach(bote => {
+          const jugadoresElegibles = bote.elegibles.map(id =>
+            partida.jugadores.find(j => j.id === id)
+          );
+          const manosElegibles = jugadoresElegibles.map(j => j.cartas);
+          const ranking = determinarGanador(manosElegibles, cartasTablero);
 
-        const jugadorGanador = partida.jugadores.find(j => j.id === idGanadorReal);
-        jugadorGanador.fichas += partida.pozo;
+          const mejorEvaluacion = ranking[0].evaluacion;
+          const ganadoresDeEsteBote = ranking.filter(r =>
+            r.evaluacion.rango === mejorEvaluacion.rango &&
+            r.evaluacion.cartas.every((c, i) =>
+              valorNumerico(c) === valorNumerico(mejorEvaluacion.cartas[i])
+            )
+          );
+
+          const idsGanadores = ganadoresDeEsteBote.map(r => jugadoresElegibles[r.jugador - 1].id);
+          const parteBase = Math.floor(bote.monto / idsGanadores.length);
+          let resto = bote.monto - parteBase * idsGanadores.length;
+
+          idsGanadores.forEach(id => {
+            const jugador = partida.jugadores.find(j => j.id === id);
+            let parte = parteBase;
+            if (resto > 0) { parte += 1; resto -= 1; }
+            jugador.fichas += parte;
+          });
+
+          resultadosPorBote.push({
+            monto: bote.monto,
+            evaluacion: mejorEvaluacion,
+            ganadores: idsGanadores
+          });
+        });
+
         partida.pozo = 0;
+        partida.ganadores = resultadosPorBote;
+
+        // Compatibilidad temporal con el frontend actual (se actualiza en el próximo paso)
+        const boteFinal = resultadosPorBote[resultadosPorBote.length - 1];
+        partida.ganador = {
+          jugador: boteFinal.ganadores[0],
+          evaluacion: boteFinal.evaluacion
+        };
 
         programarSiguienteMano(partida.id);
       }
@@ -410,18 +490,19 @@ app.post('/partida/nueva', (req, res) => {
     cartas: cartas,
     fichas: 1000,
     apuestaActual: 0,
+    totalApostado: 0,
     activo: true,
     enJuego: true,
-    // Modo de prueba interno: el jugador 1 es el humano, el resto son bots.
-    // Nunca se activa en partidas reales (soloParaTesting no lo manda un cliente real).
     esBot: soloParaTesting && index !== 0
   }));
 
   // Ciega pequeña y ciega grande automáticas (jugadores 0 y 1 al arrancar)
   jugadores[0].fichas -= apuestaMinima / 2;
   jugadores[0].apuestaActual = apuestaMinima / 2;
+  jugadores[0].totalApostado = apuestaMinima / 2;
   jugadores[1].fichas -= apuestaMinima;
   jugadores[1].apuestaActual = apuestaMinima;
+  jugadores[1].totalApostado = apuestaMinima;
 
   const id = generarId();
 
