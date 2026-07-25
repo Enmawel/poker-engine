@@ -1,3 +1,5 @@
+const crypto = require('crypto');
+
 const express = require('express');
 const cors = require('cors');
 const http = require('http');
@@ -18,6 +20,61 @@ const logs = [];
 
 // --- ESTADO DE PARTIDAS EN MEMORIA ---
 const partidas = {};
+
+// --- TOKENS SECRETOS POR JUGADOR ---
+// Separados por completo de "partidas" para que nunca se transmitan por accidente
+// junto con el estado del juego (eso se emite entero por WebSocket a todos).
+const tokensPorPartida = {}; // tokensPorPartida[idPartida] = { [token]: idJugador }
+
+function generarToken() {
+  return crypto.randomBytes(24).toString('hex');
+}
+
+function jugadorPorToken(idPartida, token) {
+  const tokens = tokensPorPartida[idPartida];
+  if (!tokens) return null;
+  return tokens[token] || null;
+}
+
+// Devuelve una copia del estado de la partida, ocultando las cartas de los
+// demás jugadores (excepto en showdown, donde todos se revelan).
+function filtrarEstadoParaJugador(partida, idJugador) {
+  const esShowdown = partida.fase === 'showdown';
+
+  const jugadoresFiltrados = partida.jugadores.map(j => {
+    if (j.id === idJugador || esShowdown) {
+      return j;
+    }
+    return {
+      ...j,
+      cartas: j.cartas.map(() => ({ oculta: true }))
+    };
+  });
+
+  return {
+    ...partida,
+    jugadores: jugadoresFiltrados,
+    tuJugadorId: idJugador
+  };
+}
+
+// Manda a cada socket conectado a la partida su propia versión del estado,
+// con las cartas ajenas ocultas.
+function emitirEstadoPersonalizado(idPartida) {
+  const partida = partidas[idPartida];
+  if (!partida) return;
+
+  const room = io.sockets.adapter.rooms.get(idPartida);
+  if (!room) return;
+
+  room.forEach(socketId => {
+    const socket = io.sockets.sockets.get(socketId);
+    if (!socket || !socket.data || !socket.data.jugadorId) return;
+
+    const estadoFiltrado = filtrarEstadoParaJugador(partida, socket.data.jugadorId);
+    socket.emit('estadoActualizado', estadoFiltrado);
+  });
+}
 
 function generarId() {
   return Math.random().toString(36).substring(2, 9);
@@ -155,7 +212,7 @@ function programarSiguienteMano(id) {
     eliminarSinFichas(partida);
     nuevaMano(partida);
 
-    io.to(id).emit('estadoActualizado', partida);
+    emitirEstadoPersonalizado(id);
 
     procesarTurnosBot(id);
   }, 15000);
@@ -450,7 +507,7 @@ function procesarTurnosBot(id) {
       procesarAccion(partidaActual, faltanteAhora > 0 ? 'fold' : 'check');
     }
 
-    io.to(id).emit('estadoActualizado', partidaActual);
+    emitirEstadoPersonalizado(id);
 
     procesarTurnosBot(id);
   }, 1500);
@@ -464,14 +521,22 @@ app.get('/', (req, res) => {
 // Ruta: obtener el estado de una partida existente
 app.get('/partida/:id', (req, res) => {
   const { id } = req.params;
+  const { token } = req.query;
   const partida = partidas[id];
 
   if (!partida) {
     return res.status(404).json({ error: 'Partida no encontrada' });
   }
 
+  const idJugadorDelToken = jugadorPorToken(id, token);
+
+  if (!idJugadorDelToken) {
+    registrarLog(req.cliente, `/partida/${id}`, 401);
+    return res.status(401).json({ error: 'Token inválido o ausente' });
+  }
+
   registrarLog(req.cliente, `/partida/${id}`, 200);
-  res.json({ id, estado: partida });
+  res.json({ id, estado: filtrarEstadoParaJugador(partida, idJugadorDelToken) });
 });
 
 // Ruta: crear una nueva partida con estado persistente
@@ -506,6 +571,15 @@ app.post('/partida/nueva', (req, res) => {
 
   const id = generarId();
 
+  const tokens = {};
+  const tokensPorJugador = {};
+  jugadores.forEach(j => {
+    const token = generarToken();
+    tokens[token] = j.id;
+    tokensPorJugador[j.id] = token;
+  });
+  tokensPorPartida[id] = tokens;
+
   partidas[id] = {
     id,
     jugadores,
@@ -526,7 +600,8 @@ app.post('/partida/nueva', (req, res) => {
   registrarLog(req.cliente, '/partida/nueva', 200);
   res.json({
     id,
-    estado: partidas[id]
+    estado: partidas[id],
+    tokens: tokensPorJugador // el operador le entrega a cada usuario real solo el suyo
   });
 
   procesarTurnosBot(id);
@@ -535,12 +610,26 @@ app.post('/partida/nueva', (req, res) => {
 // Ruta: ejecutar una acción en una partida existente
 app.post('/partida/:id/accion', (req, res) => {
   const { id } = req.params;
-  const { accion, monto } = req.body;
+  const { accion, monto, token } = req.body;
 
   const partida = partidas[id];
 
   if (!partida) {
     return res.status(404).json({ error: 'Partida no encontrada' });
+  }
+
+  const idJugadorDelToken = jugadorPorToken(id, token);
+
+  if (!idJugadorDelToken) {
+    registrarLog(req.cliente, `/partida/${id}/accion`, 401);
+    return res.status(401).json({ error: 'Token inválido o ausente' });
+  }
+
+  const jugadorDeTurno = partida.jugadores[partida.turnoActual];
+
+  if (jugadorDeTurno.id !== idJugadorDelToken) {
+    registrarLog(req.cliente, `/partida/${id}/accion`, 403);
+    return res.status(403).json({ error: 'No es tu turno' });
   }
 
   const resultado = procesarAccion(partida, accion, monto);
@@ -551,9 +640,9 @@ app.post('/partida/:id/accion', (req, res) => {
   }
 
   registrarLog(req.cliente, `/partida/${id}/accion`, 200);
-  io.to(id).emit('estadoActualizado', partida);
-  res.json({ id, estado: partida });
-
+  emitirEstadoPersonalizado(id);
+  res.json({ id, estado: filtrarEstadoParaJugador(partida, idJugadorDelToken) });
+  
   procesarTurnosBot(id);
 });
 
@@ -612,9 +701,24 @@ const PORT = process.env.PORT || 3000;
 io.on('connection', (socket) => {
   console.log('Cliente conectado por WebSocket:', socket.id);
 
-  socket.on('unirse', (partidaId) => {
+  socket.on('unirse', (partidaId, token) => {
+    const idJugador = jugadorPorToken(partidaId, token);
+
+    if (!idJugador) {
+      console.log(`Socket ${socket.id} intentó unirse a ${partidaId} con token inválido`);
+      socket.emit('errorUnirse', { error: 'Token inválido o ausente' });
+      return;
+    }
+
     socket.join(partidaId);
-    console.log(`Socket ${socket.id} se unió a partida ${partidaId}`);
+    socket.data.partidaId = partidaId;
+    socket.data.jugadorId = idJugador;
+    console.log(`Socket ${socket.id} se unió a partida ${partidaId} como jugador ${idJugador}`);
+
+    const partida = partidas[partidaId];
+    if (partida) {
+      socket.emit('estadoActualizado', filtrarEstadoParaJugador(partida, idJugador));
+    }
   });
 
   socket.on('disconnect', () => {

@@ -607,7 +607,8 @@
     const API_KEY = 'pk_facilitobet_x7k2m9q3';
 
     const params = new URLSearchParams(window.location.search);
-    const MI_JUGADOR_ID = parseInt(params.get('jugadorId')) || 1;
+    let MI_JUGADOR_ID = parseInt(params.get('jugadorId')) || 1;
+    let MI_TOKEN = params.get('token') || null;
     const mesaIdParam = params.get('mesaId') || null;
 
     let socket = null;
@@ -645,7 +646,7 @@
         socket.on('connect', () => {
           console.log('WebSocket conectado:', socket.id);
           if (partidaId) {
-            socket.emit('unirse', partidaId);
+            socket.emit('unirse', partidaId, MI_TOKEN);
           }
         });
 
@@ -1054,6 +1055,9 @@
 
     function renderEstado(estado) {
       ultimoEstado = estado;
+      if (estado.tuJugadorId) {
+        MI_JUGADOR_ID = estado.tuJugadorId;
+      }
 
       const totalAsientos = 9;
       const asientosOtros = [6, 0, 4, 8, 1, 5, 7, 3];
@@ -1116,7 +1120,7 @@
         let datos;
 
         if (mesaIdParam) {
-          const respuesta = await fetch(`${API_URL}/partida/${mesaIdParam}`, {
+          const respuesta = await fetch(`${API_URL}/partida/${mesaIdParam}?token=${encodeURIComponent(MI_TOKEN)}`, {
             method: 'GET',
             headers: { 'x-api-key': API_KEY }
           });
@@ -1132,10 +1136,11 @@
             body: JSON.stringify({ jugadores: 3 })
           });
           datos = await respuesta.json();
+          MI_TOKEN = datos.tokens[MI_JUGADOR_ID];
         }
 
         partidaId = datos.id;
-        socket.emit('unirse', partidaId);
+        socket.emit('unirse', partidaId, MI_TOKEN);
         renderEstado(datos.estado);
 
       } catch (error) {
@@ -1143,7 +1148,6 @@
       }
     }
 
-    // Función genérica: manda cualquier acción al servidor con un monto opcional
     async function ejecutarAccion(accion, monto) {
       if (!partidaId) return;
       try {
@@ -1153,7 +1157,7 @@
             'Content-Type': 'application/json',
             'x-api-key': API_KEY
           },
-          body: JSON.stringify({ accion, monto })
+          body: JSON.stringify({ accion, monto, token: MI_TOKEN })
         });
       } catch (error) {
         console.error('Error ejecutando acción:', error);
