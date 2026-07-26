@@ -240,6 +240,15 @@
       color: #aaffaa;
     }
 
+    .reloj-turno {
+      position: absolute;
+      top: -26px;
+      right: 4px;
+      font-size: 14px;
+      font-weight: bold;
+      color: #ffffff;
+    }
+
     .carta {
       position: relative;
       width: 50px;
@@ -585,8 +594,9 @@
 
     <div class="confeti-contenedor" id="confeti-contenedor"></div>
 
-    <div class="acciones oculto" id="acciones">
-  <div class="controles-apuesta" id="controles-apuesta">
+  <div class="acciones oculto" id="acciones">
+    <div class="reloj-turno" id="reloj-turno"></div>
+    <div class="controles-apuesta" id="controles-apuesta">
     <input type="range" id="slider-apuesta" min="0" max="0" step="1" oninput="actualizarMontoSlider()">
     <span class="monto-elegido" id="monto-elegido">$0</span>
     <button class="btn-accion btn-bet" id="btn-subir" onclick="ejecutarSubida()">Subir</button>
@@ -627,6 +637,8 @@
     // Control de la animación de reparto inicial de manos
     let primeraCargaManos = true;
     let animandoReparto = false;
+
+    let intervaloReloj = null;
 
     // Guarda el último estado crudo que llegó del servidor (para calcular montos de apuesta)
     let ultimoEstado = null;
@@ -989,6 +1001,22 @@
       primeraCargaCartas = false;
     }
 
+    function actualizarRelojTurno(estado) {
+      const el = document.getElementById('reloj-turno');
+      if (!el) return;
+
+      if (!estado.turnoEmpiezaEn || !estado.turnoDuracionMs) {
+        el.textContent = '';
+        return;
+      }
+
+      const transcurrido = Date.now() - estado.turnoEmpiezaEn;
+      const restanteMs = Math.max(0, estado.turnoDuracionMs - transcurrido);
+      const restanteSeg = Math.ceil(restanteMs / 1000);
+
+      el.textContent = `⏱ ${restanteSeg}s`;
+    }
+
     function actualizarBotones(estado) {
       const acciones = document.getElementById('acciones');
 
@@ -1104,6 +1132,11 @@
       }
 
       crearAsientos(totalAsientos, estadoFinal, esManoNueva);
+
+      if (intervaloReloj) clearInterval(intervaloReloj);
+      actualizarRelojTurno(estado);
+      intervaloReloj = setInterval(() => actualizarRelojTurno(ultimoEstado), 500);
+      
       actualizarPozo(estadoFinal.pozo);
       renderCartasComunitarias(estadoFinal.cartasComunitarias);
       renderFichas(estado, jugadoresMapeados);

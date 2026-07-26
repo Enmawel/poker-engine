@@ -59,6 +59,9 @@ const partidas = {};
 // junto con el estado del juego (eso se emite entero por WebSocket a todos).
 const tokensPorPartida = {}; // tokensPorPartida[idPartida] = { [token]: idJugador }
 
+const TIEMPO_LIMITE_TURNO = 30000; // 30 segundos para actuar
+const temporizadoresPorPartida = {}; // temporizadoresPorPartida[idPartida] = el setTimeout activo
+
 function generarToken() {
   return crypto.randomBytes(24).toString('hex');
 }
@@ -287,9 +290,9 @@ function programarSiguienteMano(id) {
     eliminarSinFichas(partida);
     nuevaMano(partida);
 
-    emitirEstadoPersonalizado(id);
-
     procesarTurnosBot(id);
+
+    emitirEstadoPersonalizado(id);
   }, 15000);
 }
 
@@ -567,6 +570,46 @@ function decidirAccionBot(partida, jugador) {
     : { accion: 'check' };
 }
 
+function cancelarTemporizadorTurno(id) {
+  if (temporizadoresPorPartida[id]) {
+    clearTimeout(temporizadoresPorPartida[id]);
+    delete temporizadoresPorPartida[id];
+  }
+}
+
+function iniciarTemporizadorTurno(id) {
+  cancelarTemporizadorTurno(id);
+
+  const partida = partidas[id];
+  if (!partida) return;
+  if (partida.fase === 'showdown' || partida.fase === 'terminado') return;
+
+  const jugador = partida.jugadores[partida.turnoActual];
+  if (!jugador || jugador.esBot) return;
+
+  partida.turnoEmpiezaEn = Date.now();
+  partida.turnoDuracionMs = TIEMPO_LIMITE_TURNO;
+
+  temporizadoresPorPartida[id] = setTimeout(() => {
+    const partidaActual = partidas[id];
+    if (!partidaActual) return;
+    if (partidaActual.fase === 'showdown' || partidaActual.fase === 'terminado') return;
+
+    const jugadorQueDebiaActuar = partidaActual.jugadores[partidaActual.turnoActual];
+    if (!jugadorQueDebiaActuar || jugadorQueDebiaActuar.esBot) return;
+
+    const faltante = partidaActual.apuestaRonda - jugadorQueDebiaActuar.apuestaActual;
+    const accionAutomatica = faltante > 0 ? 'fold' : 'check';
+
+    console.log(`Tiempo agotado para jugador ${jugadorQueDebiaActuar.id} en partida ${id}: ${accionAutomatica}`);
+
+    procesarAccion(partidaActual, accionAutomatica);
+    procesarTurnosBot(id);
+
+    emitirEstadoPersonalizado(id);
+  }, TIEMPO_LIMITE_TURNO);
+}
+
 // Si le toca el turno a un bot, espera un momento y actúa solo. Se encadena
 // automáticamente si el siguiente turno también es de otro bot.
 function procesarTurnosBot(id) {
@@ -575,7 +618,10 @@ function procesarTurnosBot(id) {
   if (partida.fase === 'showdown' || partida.fase === 'terminado') return;
 
   const jugadorActual = partida.jugadores[partida.turnoActual];
-  if (!jugadorActual || !jugadorActual.esBot) return;
+  if (!jugadorActual || !jugadorActual.esBot) {
+    iniciarTemporizadorTurno(id);
+    return;
+  }
 
   setTimeout(() => {
     const partidaActual = partidas[id];
@@ -595,9 +641,9 @@ function procesarTurnosBot(id) {
       procesarAccion(partidaActual, faltanteAhora > 0 ? 'fold' : 'check');
     }
 
-    emitirEstadoPersonalizado(id);
-
     procesarTurnosBot(id);
+
+    emitirEstadoPersonalizado(id);
   }, 1500);
 }
 
@@ -728,11 +774,12 @@ app.post('/partida/:id/accion', (req, res) => {
     return res.status(400).json(resultado);
   }
 
+  cancelarTemporizadorTurno(id);
+  procesarTurnosBot(id);
+
   registrarLog(req.cliente, `/partida/${id}/accion`, 200);
   emitirEstadoPersonalizado(id);
   res.json({ id, estado: filtrarEstadoParaJugador(partida, idJugadorDelToken) });
-  
-  procesarTurnosBot(id);
 });
 
 // Ruta: jugar una partida completa
