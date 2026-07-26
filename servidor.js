@@ -1,3 +1,36 @@
+require('dotenv').config();
+const { Pool } = require('pg');
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false }
+});
+
+async function crearTablas() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS partidas (
+      id TEXT PRIMARY KEY,
+      estado JSONB NOT NULL,
+      tokens JSONB NOT NULL,
+      actualizado_en TIMESTAMP DEFAULT NOW()
+    );
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS historial_manos (
+      id SERIAL PRIMARY KEY,
+      partida_id TEXT NOT NULL,
+      numero_mano INTEGER,
+      resultado JSONB NOT NULL,
+      jugado_en TIMESTAMP DEFAULT NOW()
+    );
+  `);
+
+  console.log('Tablas listas');
+}
+
+crearTablas().catch(error => console.error('Error creando tablas:', error.message));
+
 const crypto = require('crypto');
 
 const express = require('express');
@@ -74,6 +107,48 @@ function emitirEstadoPersonalizado(idPartida) {
     const estadoFiltrado = filtrarEstadoParaJugador(partida, socket.data.jugadorId);
     socket.emit('estadoActualizado', estadoFiltrado);
   });
+
+  guardarPartida(idPartida);
+}
+
+async function guardarPartida(idPartida) {
+  const partida = partidas[idPartida];
+  const tokens = tokensPorPartida[idPartida];
+  if (!partida || !tokens) return;
+
+  try {
+    await pool.query(
+      `INSERT INTO partidas (id, estado, tokens, actualizado_en)
+       VALUES ($1, $2, $3, NOW())
+       ON CONFLICT (id) DO UPDATE
+       SET estado = $2, tokens = $3, actualizado_en = NOW()`,
+      [idPartida, JSON.stringify(partida), JSON.stringify(tokens)]
+    );
+  } catch (error) {
+    console.error('Error guardando partida en la BD:', error.message);
+  }
+}
+
+async function cargarPartidasGuardadas() {
+  const resultado = await pool.query('SELECT id, estado, tokens FROM partidas');
+
+  resultado.rows.forEach(fila => {
+    partidas[fila.id] = fila.estado;
+    tokensPorPartida[fila.id] = fila.tokens;
+  });
+
+  console.log(`Partidas recuperadas de la base de datos: ${resultado.rows.length}`);
+}
+
+async function guardarHistorialMano(idPartida, resultado) {
+  try {
+    await pool.query(
+      `INSERT INTO historial_manos (partida_id, resultado) VALUES ($1, $2)`,
+      [idPartida, JSON.stringify(resultado)]
+    );
+  } catch (error) {
+    console.error('Error guardando historial de mano:', error.message);
+  }
 }
 
 function generarId() {
@@ -314,12 +389,19 @@ function procesarAccion(partida, accion, monto) {
     // Solo queda un jugador — gana automáticamente
     partida.fase = 'showdown';
     const ganador = jugadoresActivos[0];
+    const montoGanado = partida.pozo;
     partida.ganador = {
       jugador: ganador.id,
       evaluacion: { rango: 0, nombre: 'Los demás se retiraron', cartas: ganador.cartas }
     };
     ganador.fichas += partida.pozo;
     partida.pozo = 0;
+
+    guardarHistorialMano(partida.id, {
+      tipo: 'retiro',
+      ganador: partida.ganador,
+      monto: montoGanado
+    });
 
     programarSiguienteMano(partida.id);
 
@@ -393,6 +475,12 @@ function procesarAccion(partida, accion, monto) {
 
         partida.pozo = 0;
         partida.ganadores = resultadosPorBote;
+
+        guardarHistorialMano(partida.id, {
+          tipo: 'showdown',
+          ganadores: resultadosPorBote,
+          cartasTablero
+        });
 
         // Compatibilidad temporal con el frontend actual (se actualiza en el próximo paso)
         const boteFinal = resultadosPorBote[resultadosPorBote.length - 1];
@@ -596,6 +684,7 @@ app.post('/partida/nueva', (req, res) => {
     // empieza limpia desde el jugador 0
     indiceDealer: numJugadores - 1
   };
+  guardarPartida(id);
 
   registrarLog(req.cliente, '/partida/nueva', 200);
   res.json({
@@ -726,6 +815,15 @@ io.on('connection', (socket) => {
   });
 });
 
-servidor.listen(PORT, () => {
-  console.log(`Servidor corriendo en el puerto ${PORT}`);
-});
+cargarPartidasGuardadas()
+  .then(() => {
+    servidor.listen(PORT, () => {
+      console.log(`Servidor corriendo en el puerto ${PORT}`);
+    });
+  })
+  .catch(error => {
+    console.error('Error cargando partidas guardadas:', error.message);
+    servidor.listen(PORT, () => {
+      console.log(`Servidor corriendo en el puerto ${PORT} (sin recuperar partidas)`);
+    });
+  });
