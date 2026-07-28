@@ -832,6 +832,76 @@ app.get('/admin/logs', (req, res) => {
   res.json({ total: logs.length, logs });
 });
 
+app.get('/admin/estadisticas', autenticar, async (req, res) => {
+  try {
+    const totalManos = await pool.query('SELECT COUNT(*) FROM historial_manos');
+    const totalPartidas = await pool.query('SELECT COUNT(*) FROM partidas');
+    const resultados = await pool.query('SELECT resultado FROM historial_manos');
+
+    let dineroTotal = 0;
+    resultados.rows.forEach(fila => {
+      const r = fila.resultado;
+      if (r.tipo === 'retiro') {
+        dineroTotal += r.monto || 0;
+      } else if (r.tipo === 'showdown' && Array.isArray(r.ganadores)) {
+        r.ganadores.forEach(bote => {
+          dineroTotal += bote.monto || 0;
+        });
+      }
+    });
+
+    res.json({
+      manosJugadas: Number(totalManos.rows[0].count),
+      partidasRegistradas: Number(totalPartidas.rows[0].count),
+      dineroTotalMovido: dineroTotal
+    });
+  } catch (error) {
+    console.error('Error en /admin/estadisticas:', error.message);
+    res.status(500).json({ error: 'Error calculando estadísticas' });
+  }
+});
+
+app.get('/admin/historial', autenticar, async (req, res) => {
+  try {
+    const limite = Math.min(Number(req.query.limite) || 50, 200);
+
+    const resultado = await pool.query(
+      'SELECT id, partida_id, resultado, jugado_en FROM historial_manos ORDER BY jugado_en DESC LIMIT $1',
+      [limite]
+    );
+
+    const manos = resultado.rows.map(fila => {
+      const r = fila.resultado;
+      let monto = 0;
+      let ganadores = [];
+
+      if (r.tipo === 'retiro') {
+        monto = r.monto || 0;
+        ganadores = [r.ganador?.jugador];
+      } else if (r.tipo === 'showdown' && Array.isArray(r.ganadores)) {
+        r.ganadores.forEach(bote => {
+          monto += bote.monto || 0;
+          ganadores.push(...bote.ganadores);
+        });
+      }
+
+      return {
+        id: fila.id,
+        partidaId: fila.partida_id,
+        tipo: r.tipo,
+        ganadores,
+        monto,
+        fecha: fila.jugado_en
+      };
+    });
+
+    res.json({ total: manos.length, manos });
+  } catch (error) {
+    console.error('Error en /admin/historial:', error.message);
+    res.status(500).json({ error: 'Error obteniendo historial' });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 
 io.on('connection', (socket) => {

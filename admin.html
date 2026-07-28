@@ -23,6 +23,12 @@
       margin-bottom: 2rem;
     }
 
+    .seccion-titulo {
+      color: #e4e4e7;
+      font-size: 1.2rem;
+      margin: 1.5rem 0 1rem;
+    }
+
     .stats {
       display: flex;
       gap: 1rem;
@@ -94,6 +100,22 @@
     </div>
   </div>
 
+  <h2 class="seccion-titulo">Actividad de Póker</h2>
+  <div class="stats">
+    <div class="stat-card">
+      <div class="numero" id="manosJugadas">0</div>
+      <div class="label">Manos jugadas</div>
+    </div>
+    <div class="stat-card">
+      <div class="numero" id="dineroMovido">$0</div>
+      <div class="label">Dinero total movido</div>
+    </div>
+    <div class="stat-card">
+      <div class="numero" id="partidasRegistradas">0</div>
+      <div class="label">Partidas registradas</div>
+    </div>
+  </div>
+
   <table>
     <thead>
       <tr>
@@ -107,9 +129,36 @@
     </tbody>
   </table>
 
+  <h2 class="seccion-titulo">Historial de Manos Recientes</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Fecha</th>
+        <th>Partida</th>
+        <th>Tipo</th>
+        <th>Ganadores</th>
+        <th>Monto</th>
+      </tr>
+    </thead>
+    <tbody id="tablaHistorial">
+    </tbody>
+  </table>
+
   <script>
+   
+   const ES_LOCAL = (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost');
+    const API_URL = ES_LOCAL
+  ? 'http://localhost:3000'
+  : 'https://poker-engine-production-0995.up.railway.app';
+
+    const API_KEY = 'pk_facilitobet_x7k2m9q3';
+    
     async function cargarLogs() {
-      const respuesta = await fetch('/admin/logs');
+      const respuesta = await fetch(`${API_URL}/admin/logs`, {
+        headers: {
+          'Authorization': `Bearer ${API_KEY}`
+        }
+      });
       const data = await respuesta.json();
 
       document.getElementById('totalPeticiones').textContent = data.total;
@@ -134,7 +183,54 @@
 
     cargarLogs();
     setInterval(cargarLogs, 3000);
-  </script>
+
+    async function cargarEstadisticasPoker() {
+  try {
+    const respuesta = await fetch(`${API_URL}/admin/estadisticas`, {
+      headers: { 'x-api-key': API_KEY }
+    });
+    const data = await respuesta.json();
+
+    document.getElementById('manosJugadas').textContent = data.manosJugadas;
+    document.getElementById('dineroMovido').textContent = `$${data.dineroTotalMovido}`;
+    document.getElementById('partidasRegistradas').textContent = data.partidasRegistradas;
+  } catch (error) {
+    console.error('Error cargando estadísticas de póker:', error);
+  }
+}
+
+   cargarEstadisticasPoker();
+   setInterval(cargarEstadisticasPoker, 5000);
+
+   async function cargarHistorialManos() {
+  try {
+    const respuesta = await fetch(`${API_URL}/admin/historial?limite=50`, {
+      headers: { 'x-api-key': API_KEY }
+    });
+    const data = await respuesta.json();
+
+    const tabla = document.getElementById('tablaHistorial');
+    tabla.innerHTML = '';
+
+    data.manos.forEach(mano => {
+      const fila = document.createElement('tr');
+      fila.innerHTML = `
+        <td>${new Date(mano.fecha).toLocaleString()}</td>
+        <td>${mano.partidaId}</td>
+        <td><span class="badge">${mano.tipo}</span></td>
+        <td>${mano.ganadores.join(', ')}</td>
+        <td>$${mano.monto}</td>
+      `;
+      tabla.appendChild(fila);
+    });
+  } catch (error) {
+    console.error('Error cargando historial de manos:', error);
+  }
+}
+
+ cargarHistorialManos();
+ setInterval(cargarHistorialManos, 5000);
+</script>
 
 </body>
 </html>
