@@ -44,9 +44,9 @@
       top: 372px;
     }
 
-    .mesa.movil .acciones {
+    .acciones.movil {
       position: fixed;
-      bottom: 120px;
+      bottom: 75px;
       left: 50%;
       transform: translateX(-50%);
       width: 90vw;
@@ -257,9 +257,8 @@
     }
 
     .asiento.principal {
-      flex-direction: column-reverse;
-      transform: translate(-50%, -50%) translateY(-50px);
-    }
+  transform: translate(-50%, -50%) translateY(-50px);
+}
 
     .fila-jugador {
       display: flex;
@@ -420,7 +419,7 @@
 
     .acciones {
   position: absolute;
-  bottom: 75px;
+  bottom: 165px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -630,6 +629,37 @@
         opacity: 0;
       }
     }
+    @media (max-width: 400px) {
+      .btn-accion {
+        padding: 8px 14px;
+        font-size: 12px;
+      }
+      .controles-apuesta {
+        gap: 4px;
+        padding: 5px 6px;
+      }
+      .controles-apuesta input[type="range"] {
+        width: 60px;
+      }
+      .controles-apuesta .btn-accion {
+        padding: 6px 8px;
+        font-size: 11px;
+      }
+      .monto-elegido {
+        font-size: 11px;
+        min-width: 32px;
+      }
+      .fila-basicos {
+        gap: 6px;
+      }
+      .fila-basicos .btn-accion {
+        padding: 8px 10px;
+        font-size: 12px;
+      }
+      .acciones.movil {
+        bottom: 10px;
+      }
+    }
   </style>
 </head>
 <body>
@@ -770,8 +800,11 @@
 
 function aplicarModoDispositivo() {
   const mesaDiv = document.getElementById('mesa');
+  const accionesDiv = document.getElementById('acciones');
+
   if (esMovil()) {
     mesaDiv.classList.add('movil');
+    accionesDiv.classList.add('movil');
 
     const anchoDisponible = window.innerWidth * 0.94;
     const anchoReferencia = 380;
@@ -779,6 +812,7 @@ function aplicarModoDispositivo() {
     mesaDiv.style.transform = `scale(${escala})`;
   } else {
     mesaDiv.classList.remove('movil');
+    accionesDiv.classList.remove('movil');
     mesaDiv.style.transform = '';
   }
 }
