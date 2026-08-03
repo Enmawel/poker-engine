@@ -197,6 +197,7 @@ function autenticar(req, res, next) {
 app.use('/partida', autenticar);
 app.use('/mano', autenticar);
 app.use('/mazo', autenticar);
+app.use('/mesa', autenticar);
 
 const { crearMazo, barajar, repartir, repartirTablero, determinarGanador, evaluarMano, valorNumerico } = require('./motor');
 
@@ -673,6 +674,98 @@ app.get('/partida/:id', (req, res) => {
   res.json({ id, estado: filtrarEstadoParaJugador(partida, idJugadorDelToken) });
 });
 
+// Ruta: crear una mesa vacía que espera jugadores reales (para el lobby)
+app.post('/mesa/crear', (req, res) => {
+  const asientosMax = req.body.asientosMax || 6;
+  const apuestaMinima = req.body.apuestaMinima || 50;
+  const fichasIniciales = req.body.fichasIniciales || 1000;
+
+  const id = generarId();
+
+  partidas[id] = {
+    id,
+    estado: 'esperando',
+    asientosMax,
+    apuestaMinima,
+    apuestaMaxima: null,
+    fichasIniciales,
+    jugadores: [],
+    fase: null
+  };
+  tokensPorPartida[id] = {};
+
+  guardarPartida(id);
+
+  registrarLog(req.cliente, '/mesa/crear', 200);
+  res.json({ id, estado: partidas[id] });
+});
+
+// Ruta: unirse a una mesa que está esperando jugadores. Si con este jugador
+// se llena el último asiento, la mesa arranca sola.
+app.post('/mesa/:id/unirse', (req, res) => {
+  const { id } = req.params;
+  const { nombreUsuario } = req.body;
+
+  const mesa = partidas[id];
+  if (!mesa) {
+    return res.status(404).json({ error: 'Mesa no encontrada' });
+  }
+  if (mesa.estado !== 'esperando') {
+    return res.status(400).json({ error: 'Esta mesa ya está en juego o no acepta más jugadores' });
+  }
+  if (mesa.jugadores.length >= mesa.asientosMax) {
+    return res.status(400).json({ error: 'La mesa ya está llena' });
+  }
+  if (!nombreUsuario) {
+    return res.status(400).json({ error: 'Falta el nombre de usuario' });
+  }
+
+  const asiento = mesa.jugadores.length;
+  const jugador = {
+    id: asiento + 1,
+    asiento,
+    nombre: nombreUsuario,
+    cartas: [],
+    fichas: mesa.fichasIniciales,
+    apuestaActual: 0,
+    totalApostado: 0,
+    activo: true,
+    enJuego: true,
+    esBot: false
+  };
+  mesa.jugadores.push(jugador);
+
+  const token = generarToken();
+  tokensPorPartida[id][token] = jugador.id;
+
+  let mesaLlena = false;
+
+  if (mesa.jugadores.length === mesa.asientosMax) {
+    mesaLlena = true;
+    mesa.indiceDealer = mesa.jugadores.length - 1;
+    mesa.estado = 'jugando';
+    nuevaMano(mesa);
+    procesarTurnosBot(id);
+  }
+
+  guardarPartida(id);
+  registrarLog(req.cliente, `/mesa/${id}/unirse`, 200);
+
+  res.json({
+    id,
+    jugadorId: jugador.id,
+    asiento,
+    token,
+    mesaLlena,
+    asientosOcupados: mesa.jugadores.length,
+    asientosMax: mesa.asientosMax
+  });
+
+  if (mesaLlena) {
+    emitirEstadoPersonalizado(id);
+  }
+});
+
 // Ruta: crear una nueva partida con estado persistente
 app.post('/partida/nueva', (req, res) => {
   const numJugadores = req.body.jugadores || 3;
@@ -900,6 +993,22 @@ app.get('/admin/historial', autenticar, async (req, res) => {
     console.error('Error en /admin/historial:', error.message);
     res.status(500).json({ error: 'Error obteniendo historial' });
   }
+});
+
+// Ruta: listar las mesas activas para el lobby
+app.get('/mesas', autenticar, (req, res) => {
+  const mesas = Object.values(partidas)
+    .filter(p => p.estado === 'esperando' || p.estado === 'jugando')
+    .map(p => ({
+      id: p.id,
+      estado: p.estado,
+      asientosOcupados: p.jugadores.length,
+      asientosMax: p.asientosMax,
+      apuestaMinima: p.apuestaMinima
+    }));
+
+  registrarLog(req.cliente, '/mesas', 200);
+  res.json({ mesas });
 });
 
 const PORT = process.env.PORT || 3000;

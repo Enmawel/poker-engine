@@ -1290,7 +1290,7 @@ window.addEventListener('resize', aplicarModoDispositivo);
           return {
             id: j.id,
             asiento: asientosOtros[otroIndex],
-            nombre: `Usuario ${j.id}`,
+            nombre: j.nombre || `Usuario ${j.id}`,
             fichas: j.fichas,
             esTurno: estado.jugadores[estado.turnoActual].id === j.id,
             cartas: j.cartas,
