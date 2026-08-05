@@ -660,9 +660,129 @@
         bottom: 10px;
       }
     }
+
+    .btn-salir {
+      position: fixed;
+      top: 16px;
+      left: 16px;
+      z-index: 60;
+      background: rgba(0,0,0,0.5);
+      color: white;
+      border: 1px solid rgba(255,255,255,0.3);
+      border-radius: 8px;
+      padding: 8px 14px;
+      font-size: 13px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    .btn-salir:hover {
+      background: rgba(255,255,255,0.15);
+    }
+
+    .modal-confirmar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 70;
+    }
+    .modal-confirmar.oculto {
+      display: none;
+    }
+    .modal-confirmar-contenido {
+      background: #14342a;
+      border: 2px solid #ffd700;
+      border-radius: 16px;
+      padding: 24px 30px;
+      text-align: center;
+      color: white;
+      max-width: 300px;
+    }
+    .botones-confirmar {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      margin-top: 16px;
+    }
+
+    .sala-espera {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: #1a1a1a;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 30;
+    }
+    .sala-espera.oculto {
+      display: none;
+    }
+    .sala-espera-caja {
+      background: #14342a;
+      border: 2px solid #ffd700;
+      border-radius: 16px;
+      padding: 32px 40px;
+      text-align: center;
+      color: white;
+      max-width: 340px;
+    }
+    .sala-espera-caja h2 {
+      color: #ffd700;
+      margin-bottom: 12px;
+    }
+    .contador-espera {
+      font-size: 28px;
+      font-weight: bold;
+      margin-bottom: 16px;
+    }
+    .lista-espera {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 16px;
+    }
+    .lista-espera .jugador-espera {
+      background: rgba(255,255,255,0.08);
+      border-radius: 8px;
+      padding: 6px 10px;
+      font-size: 14px;
+    }
+    .texto-espera {
+      font-size: 12px;
+      color: #9fe1cb;
+    }
   </style>
 </head>
 <body>
+
+  <button class="btn-salir" id="btn-salir" onclick="abrirModalSalir()">✕ Salir</button>
+
+  <div class="modal-confirmar oculto" id="modal-confirmar-salir">
+    <div class="modal-confirmar-contenido">
+      <p>¿Seguro que quieres abandonar la partida?</p>
+      <div class="botones-confirmar">
+        <button class="btn-accion btn-allin" onclick="confirmarSalir()">Sí</button>
+        <button class="btn-accion" onclick="cerrarModalSalir()">No</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="sala-espera oculto" id="sala-espera">
+    <div class="sala-espera-caja">
+      <h2>Esperando jugadores...</h2>
+      <div class="contador-espera" id="contador-espera">0 / 0</div>
+      <div class="lista-espera" id="lista-espera"></div>
+      <p class="texto-espera">La mesa arranca sola cuando se llenen todos los asientos.</p>
+    </div>
+  </div>
 
   <div class="mesa" id="mesa">
     <div class="pozo">Pozo: $0</div>
@@ -1263,18 +1383,48 @@ window.addEventListener('resize', aplicarModoDispositivo);
       document.getElementById('btn-subir').textContent = esAllIn ? 'Subir (All-in)' : `Subir $${valor}`;
     }
 
+    function mostrarSalaDeEspera(estado) {
+      document.getElementById('mesa').style.display = 'none';
+      document.getElementById('acciones').classList.add('oculto');
+      document.getElementById('sala-espera').classList.remove('oculto');
+
+      document.getElementById('contador-espera').textContent =
+        `${estado.jugadores.length} / ${estado.asientosMax}`;
+
+      const lista = document.getElementById('lista-espera');
+      lista.innerHTML = '';
+      estado.jugadores.forEach(j => {
+        const div = document.createElement('div');
+        div.className = 'jugador-espera';
+        div.textContent = j.id === MI_JUGADOR_ID ? `${j.nombre} (Tú)` : j.nombre;
+        lista.appendChild(div);
+      });
+    }
+
+    function ocultarSalaDeEspera() {
+      document.getElementById('mesa').style.display = '';
+      document.getElementById('sala-espera').classList.add('oculto');
+    }
+
     function renderEstado(estado) {
       ultimoEstado = estado;
       if (estado.tuJugadorId) {
         MI_JUGADOR_ID = estado.tuJugadorId;
       }
 
+      if (estado.estado === 'esperando') {
+        mostrarSalaDeEspera(estado);
+        return;
+      }
+      ocultarSalaDeEspera();
+
       const totalAsientos = 9;
       const asientosOtros = [6, 0, 4, 8, 1, 5, 7, 3];
 
-      const otrosJugadores = estado.jugadores.filter(j => j.id !== MI_JUGADOR_ID);
+      const jugadoresEnMesa = estado.jugadores.filter(j => j.enJuego !== false);
+      const otrosJugadores = jugadoresEnMesa.filter(j => j.id !== MI_JUGADOR_ID);
 
-      const jugadoresMapeados = estado.jugadores.map((j) => {
+      const jugadoresMapeados = jugadoresEnMesa.map((j) => {
         if (j.id === MI_JUGADOR_ID) {
           return {
             id: j.id,
@@ -1545,6 +1695,39 @@ window.addEventListener('resize', aplicarModoDispositivo);
       setTimeout(() => {
         contenedor.innerHTML = '';
       }, 3500);
+    }
+
+    function abrirModalSalir() {
+      document.getElementById('modal-confirmar-salir').classList.remove('oculto');
+    }
+
+    function cerrarModalSalir() {
+      document.getElementById('modal-confirmar-salir').classList.add('oculto');
+    }
+
+    async function confirmarSalir() {
+      let miNombre = '';
+      if (ultimoEstado) {
+        const miJugador = ultimoEstado.jugadores.find(j => j.id === MI_JUGADOR_ID);
+        if (miJugador) miNombre = miJugador.nombre || '';
+      }
+
+      if (partidaId && MI_TOKEN) {
+        try {
+          await fetch(`${API_URL}/mesa/${partidaId}/salir`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-api-key': API_KEY
+            },
+            body: JSON.stringify({ token: MI_TOKEN })
+          });
+        } catch (error) {
+          console.error('Error saliendo de la mesa:', error);
+        }
+      }
+
+      window.location.href = 'lobby.html?usuario=' + encodeURIComponent(miNombre);
     }
 
     cargarSocketIoYArrancar();

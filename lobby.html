@@ -99,6 +99,22 @@
       color:#71717a;
       cursor:not-allowed;
     }
+
+    .tabla-scroll {
+      overflow-x: auto;
+    }
+
+    @media (max-width: 500px) {
+      body {
+        padding: 1rem;
+      }
+      .crear-mesa input {
+        width: 47%;
+      }
+      table {
+        min-width: 480px;
+      }
+    }
   </style>
 </head>
 <body>
@@ -121,6 +137,7 @@
     </div>
   </div>
 
+  <div class="tabla-scroll">
   <table>
     <thead>
       <tr>
@@ -133,6 +150,7 @@
     </thead>
     <tbody id="tablaMesas"></tbody>
   </table>
+  </div>
 
   <script>
     const ES_LOCAL = (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost');

@@ -227,6 +227,7 @@ function nuevaMano(partida) {
 
   if (jugadoresEnJuego.length < 2) {
     partida.fase = 'terminado';
+    partida.estado = 'terminado';
     return;
   }
 
@@ -690,6 +691,7 @@ app.post('/mesa/crear', (req, res) => {
     apuestaMaxima: null,
     fichasIniciales,
     jugadores: [],
+    proximoIdJugador: 0,
     fase: null
   };
   tokensPorPartida[id] = {};
@@ -720,9 +722,14 @@ app.post('/mesa/:id/unirse', (req, res) => {
     return res.status(400).json({ error: 'Falta el nombre de usuario' });
   }
 
-  const asiento = mesa.jugadores.length;
+  const asientosOcupados = mesa.jugadores.map(j => j.asiento);
+  let asiento = 0;
+  while (asientosOcupados.includes(asiento)) asiento++;
+
+  mesa.proximoIdJugador = (mesa.proximoIdJugador || 0) + 1;
+
   const jugador = {
-    id: asiento + 1,
+    id: mesa.proximoIdJugador,
     asiento,
     nombre: nombreUsuario,
     cartas: [],
@@ -764,6 +771,85 @@ app.post('/mesa/:id/unirse', (req, res) => {
   if (mesaLlena) {
     emitirEstadoPersonalizado(id);
   }
+});
+
+// Ruta: abandonar una mesa (se levanta si está esperando, o se retira de la mano si ya está en curso)
+app.post('/mesa/:id/salir', (req, res) => {
+  const { id } = req.params;
+  const { token } = req.body;
+
+  const mesa = partidas[id];
+  if (!mesa) {
+    return res.status(404).json({ error: 'Mesa no encontrada' });
+  }
+
+  const idJugador = jugadorPorToken(id, token);
+  if (!idJugador) {
+    return res.status(401).json({ error: 'Token inválido o ausente' });
+  }
+
+  const jugador = mesa.jugadores.find(j => j.id === idJugador);
+  if (!jugador) {
+    return res.status(404).json({ error: 'Jugador no encontrado en esta mesa' });
+  }
+
+  if (mesa.estado === 'esperando') {
+    mesa.jugadores = mesa.jugadores.filter(j => j.id !== idJugador);
+
+    if (mesa.jugadores.length === 0) {
+      delete partidas[id];
+      delete tokensPorPartida[id];
+      registrarLog(req.cliente, `/mesa/${id}/salir`, 200);
+      return res.json({ ok: true, mesaEliminada: true });
+    }
+
+  } else {
+    const faseDeApuestas = ['preflop', 'flop', 'turn', 'river'].includes(mesa.fase);
+
+    if (faseDeApuestas && jugador.activo) {
+      const esSuTurno = mesa.jugadores[mesa.turnoActual] &&
+                         mesa.jugadores[mesa.turnoActual].id === idJugador;
+
+      if (esSuTurno) {
+        cancelarTemporizadorTurno(id);
+        procesarAccion(mesa, 'fold');
+        procesarTurnosBot(id);
+      } else {
+        jugador.activo = false;
+
+        const activos = mesa.jugadores.filter(j => j.activo);
+        if (activos.length === 1) {
+          mesa.fase = 'showdown';
+          const ganador = activos[0];
+          const montoGanado = mesa.pozo;
+          mesa.ganador = {
+            jugador: ganador.id,
+            evaluacion: { rango: 0, nombre: 'Los demás se retiraron', cartas: ganador.cartas }
+          };
+          ganador.fichas += mesa.pozo;
+          mesa.pozo = 0;
+
+          guardarHistorialMano(mesa.id, {
+            tipo: 'retiro',
+            ganador: mesa.ganador,
+            monto: montoGanado
+          });
+
+          programarSiguienteMano(mesa.id);
+        }
+      }
+    }
+
+    jugador.enJuego = false;
+  }
+
+  delete tokensPorPartida[id][token];
+  guardarPartida(id);
+
+  registrarLog(req.cliente, `/mesa/${id}/salir`, 200);
+  res.json({ ok: true });
+
+  emitirEstadoPersonalizado(id);
 });
 
 // Ruta: crear una nueva partida con estado persistente
