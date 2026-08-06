@@ -193,6 +193,38 @@ function autenticar(req, res, next) {
   next();
 }
 
+// --- WEBHOOKS DE PAGO POR CLIENTE ---
+// Cuando un jugador sale de una mesa con fichas, avisamos a este endpoint
+// para que la casa de apuestas le acredite el saldo real. Por ahora,
+// FacilitoBet apunta a nuestro propio endpoint de prueba.
+const webhooksPorCliente = {
+  'FacilitoBet': 'http://localhost:3000/webhook-test/recibir-pago',
+  'BetVenezuela': null,
+  'GanaMax': null
+};
+
+async function notificarPago(mesa, jugador) {
+  const cliente = mesa.cliente;
+  const webhookUrl = webhooksPorCliente[cliente];
+  if (!webhookUrl) return;
+
+  try {
+    await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        mesaId: mesa.id,
+        jugadorId: jugador.id,
+        idUsuarioExterno: jugador.idUsuarioExterno || null,
+        nombre: jugador.nombre,
+        fichasFinales: jugador.fichas
+      })
+    });
+  } catch (error) {
+    console.error(`Error notificando pago a ${cliente}:`, error.message);
+  }
+}
+
 // Proteger todas las rutas excepto / y /admin/logs
 app.use('/partida', autenticar);
 app.use('/mano', autenticar);
@@ -228,6 +260,7 @@ function nuevaMano(partida) {
   if (jugadoresEnJuego.length < 2) {
     partida.fase = 'terminado';
     partida.estado = 'terminado';
+    jugadoresEnJuego.forEach(j => notificarPago(partida, j));
     return;
   }
 
@@ -689,6 +722,7 @@ app.post('/mesa/crear', (req, res) => {
 
   partidas[id] = {
     id,
+    cliente: req.cliente,
     estado: 'esperando',
     asientosMax,
     apuestaMinima,
@@ -710,7 +744,7 @@ app.post('/mesa/crear', (req, res) => {
 // se llena el último asiento, la mesa arranca sola.
 app.post('/mesa/:id/unirse', (req, res) => {
   const { id } = req.params;
-  const { nombreUsuario } = req.body;
+  const { nombreUsuario, idUsuarioExterno } = req.body;
 
   const mesa = partidas[id];
   if (!mesa) {
@@ -736,6 +770,7 @@ app.post('/mesa/:id/unirse', (req, res) => {
     id: mesa.proximoIdJugador,
     asiento,
     nombre: nombreUsuario,
+    idUsuarioExterno: idUsuarioExterno || null,
     cartas: [],
     fichas: mesa.fichasIniciales,
     apuestaActual: 0,
@@ -799,6 +834,7 @@ app.post('/mesa/:id/salir', (req, res) => {
 
   if (mesa.estado === 'esperando') {
     mesa.jugadores = mesa.jugadores.filter(j => j.id !== idJugador);
+    notificarPago(mesa, { ...jugador, fichas: mesa.fichasIniciales });
 
     if (mesa.jugadores.length === 0) {
       delete partidas[id];
@@ -844,7 +880,8 @@ app.post('/mesa/:id/salir', (req, res) => {
       }
     }
 
-    jugador.enJuego = false;
+   jugador.enJuego = false;
+    notificarPago(mesa, jugador);
   }
 
   delete tokensPorPartida[id][token];
@@ -1099,6 +1136,13 @@ app.get('/mesas', autenticar, (req, res) => {
 
   registrarLog(req.cliente, '/mesas', 200);
   res.json({ mesas });
+});
+
+// Ruta de PRUEBA: simula el endpoint que la casa de apuestas usaría para
+// recibir el aviso de cuántas fichas le quedaron a un jugador al salir.
+app.post('/webhook-test/recibir-pago', (req, res) => {
+  console.log('💰 Webhook de pago recibido:', JSON.stringify(req.body));
+  res.json({ recibido: true });
 });
 
 const PORT = process.env.PORT || 3000;
