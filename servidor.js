@@ -677,9 +677,13 @@ app.get('/partida/:id', (req, res) => {
 
 // Ruta: crear una mesa vacía que espera jugadores reales (para el lobby)
 app.post('/mesa/crear', (req, res) => {
-  const asientosMax = req.body.asientosMax || 6;
-  const apuestaMinima = req.body.apuestaMinima || 50;
-  const fichasIniciales = req.body.fichasIniciales || 1000;
+  let asientosMax = Number(req.body.asientosMax) || 6;
+  let apuestaMinima = Number(req.body.apuestaMinima) || 50;
+  let fichasIniciales = Number(req.body.fichasIniciales) || 1000;
+
+  asientosMax = Math.min(9, Math.max(2, Math.round(asientosMax)));
+  apuestaMinima = Math.min(10000, Math.max(1, Math.round(apuestaMinima)));
+  fichasIniciales = Math.min(1000000, Math.max(apuestaMinima * 2, Math.round(fichasIniciales)));
 
   const id = generarId();
 

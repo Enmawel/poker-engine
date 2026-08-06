@@ -2,8 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Lobby - Poker Engine</title>
+  <title>Admin - Mesas</title>
   <style>
     * { margin:0; padding:0; box-sizing:border-box; }
     body {
@@ -14,24 +13,6 @@
     }
     h1 { color:#22c55e; margin-bottom:0.5rem; }
     .subtitulo { color:#71717a; margin-bottom:2rem; }
-    .usuario-box {
-      background:#1a1d27;
-      border:1px solid #2a2d3a;
-      border-radius:12px;
-      padding:1rem 1.5rem;
-      margin-bottom:2rem;
-      display:flex;
-      align-items:center;
-      gap:10px;
-    }
-    .usuario-box input {
-      background:#0f1117;
-      border:1px solid #2a2d3a;
-      color:#e4e4e7;
-      padding:0.5rem 0.8rem;
-      border-radius:8px;
-      font-size:14px;
-    }
     .crear-mesa {
       background:#1a1d27;
       border:1px solid #2a2d3a;
@@ -84,50 +65,23 @@
     }
     .badge.esperando { background:#f59e0b22; color:#f59e0b; }
     .badge.jugando { background:#22c55e22; color:#22c55e; }
-    .btn-unirse {
-      background:#2d6a4f;
-      border:1px solid #52b788;
-      color:white;
-      padding:0.4rem 1rem;
-      border-radius:8px;
-      cursor:pointer;
-      font-size:13px;
-    }
-    .btn-unirse:disabled {
-      background:#2a2d3a;
-      border-color:#3a3d4a;
-      color:#71717a;
-      cursor:not-allowed;
-    }
-
-    .tabla-scroll {
-      overflow-x: auto;
-    }
-
-    @media (max-width: 500px) {
-      body {
-        padding: 1rem;
-      }
-      .crear-mesa input {
-        width: 47%;
-      }
-      table {
-        min-width: 480px;
-      }
-    }
   </style>
 </head>
 <body>
 
-  <h1>🃏 Lobby de Mesas</h1>
-  <p class="subtitulo">Elige una mesa para unirte</p>
+  <h1>🃏 Admin — Mesas</h1>
+  <p class="subtitulo">Crear y supervisar mesas (herramienta interna, no para jugadores)</p>
 
-  <div class="usuario-box">
-    <label for="nombreUsuario">Tu nombre:</label>
-    <input type="text" id="nombreUsuario" placeholder="Ej: Carlos">
+  <div class="crear-mesa">
+    <h2>Crear mesa nueva</h2>
+    <div class="fila">
+      <input type="number" id="inputAsientos" placeholder="Asientos" value="2">
+      <input type="number" id="inputCiega" placeholder="Ciega grande" value="50">
+      <input type="number" id="inputFichas" placeholder="Fichas iniciales" value="1000">
+      <button onclick="crearMesa()">Crear mesa</button>
+    </div>
   </div>
 
-  <div class="tabla-scroll">
   <table>
     <thead>
       <tr>
@@ -135,12 +89,10 @@
         <th>Estado</th>
         <th>Jugadores</th>
         <th>Ciega grande</th>
-        <th></th>
       </tr>
     </thead>
     <tbody id="tablaMesas"></tbody>
   </table>
-  </div>
 
   <script>
     const ES_LOCAL = (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost');
@@ -149,36 +101,23 @@
       : 'https://poker-engine-production-0995.up.railway.app';
     const API_KEY = 'pk_facilitobet_x7k2m9q3';
 
-    const params = new URLSearchParams(window.location.search);
-    const nombreDesdeUrl = params.get('usuario') || '';
-    document.getElementById('nombreUsuario').value = nombreDesdeUrl;
-
-    async function unirseAMesa(idMesa) {
-      const nombre = document.getElementById('nombreUsuario').value.trim();
-      if (!nombre) {
-        alert('Escribe tu nombre antes de unirte a una mesa');
-        return;
-      }
+    async function crearMesa() {
+      const asientosMax = Number(document.getElementById('inputAsientos').value) || 2;
+      const apuestaMinima = Number(document.getElementById('inputCiega').value) || 50;
+      const fichasIniciales = Number(document.getElementById('inputFichas').value) || 1000;
 
       try {
-        const respuesta = await fetch(`${API_URL}/mesa/${idMesa}/unirse`, {
+        await fetch(`${API_URL}/mesa/crear`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'x-api-key': API_KEY
           },
-          body: JSON.stringify({ nombreUsuario: nombre })
+          body: JSON.stringify({ asientosMax, apuestaMinima, fichasIniciales })
         });
-        const datos = await respuesta.json();
-
-        if (!respuesta.ok) {
-          alert(datos.error || 'No se pudo unir a la mesa');
-          return;
-        }
-
-        window.location.href = `mesa.html?mesaId=${idMesa}&jugadorId=${datos.jugadorId}&token=${datos.token}`;
+        cargarMesas();
       } catch (error) {
-        console.error('Error uniéndose a la mesa:', error);
+        console.error('Error creando mesa:', error);
       }
     }
 
@@ -194,15 +133,11 @@
 
         datos.mesas.forEach(mesa => {
           const fila = document.createElement('tr');
-          const llena = mesa.asientosOcupados >= mesa.asientosMax;
-          const puedeUnirse = mesa.estado === 'esperando' && !llena;
-
           fila.innerHTML = `
             <td>${mesa.id}</td>
             <td><span class="badge ${mesa.estado}">${mesa.estado}</span></td>
             <td>${mesa.asientosOcupados} / ${mesa.asientosMax}</td>
             <td>$${mesa.apuestaMinima}</td>
-            <td><button class="btn-unirse" ${puedeUnirse ? '' : 'disabled'} onclick="unirseAMesa('${mesa.id}')">Unirse</button></td>
           `;
           tabla.appendChild(fila);
         });
