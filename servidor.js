@@ -1131,7 +1131,8 @@ app.get('/mesas', autenticar, (req, res) => {
       estado: p.estado,
       asientosOcupados: p.jugadores.length,
       asientosMax: p.asientosMax,
-      apuestaMinima: p.apuestaMinima
+      apuestaMinima: p.apuestaMinima,
+      nombresJugadores: p.jugadores.filter(j => j.enJuego !== false).map(j => j.nombre)
     }));
 
   registrarLog(req.cliente, '/mesas', 200);

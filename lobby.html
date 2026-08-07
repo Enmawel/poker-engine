@@ -115,6 +115,24 @@
         min-width: 480px;
       }
     }
+    .nombres-mesa {
+      font-size: 11px;
+      color: #71717a;
+      margin-top: 2px;
+    }
+
+    .error-mensaje {
+      background: #7f1d1d33;
+      border: 1px solid #ef4444;
+      color: #fca5a5;
+      padding: 0.8rem 1.2rem;
+      border-radius: 10px;
+      margin-bottom: 1.5rem;
+      font-size: 14px;
+    }
+    .error-mensaje.oculto {
+      display: none;
+    }
   </style>
 </head>
 <body>
@@ -125,6 +143,10 @@
   <div class="usuario-box">
     <label for="nombreUsuario">Tu nombre:</label>
     <input type="text" id="nombreUsuario" placeholder="Ej: Carlos">
+  </div>
+
+  <div class="error-mensaje oculto" id="errorMensaje">
+    No se pudo cargar la lista de mesas. Verifica tu conexión o que el servidor esté encendido.
   </div>
 
   <div class="tabla-scroll">
@@ -183,24 +205,36 @@
     }
 
     async function cargarMesas() {
+      const errorMensaje = document.getElementById('errorMensaje');
       try {
         const respuesta = await fetch(`${API_URL}/mesas`, {
           headers: { 'x-api-key': API_KEY }
         });
+
+        if (!respuesta.ok) {
+          throw new Error(`Respuesta no válida: ${respuesta.status}`);
+        }
+
         const datos = await respuesta.json();
+        errorMensaje.classList.add('oculto');
 
         const tabla = document.getElementById('tablaMesas');
         tabla.innerHTML = '';
-
         datos.mesas.forEach(mesa => {
           const fila = document.createElement('tr');
           const llena = mesa.asientosOcupados >= mesa.asientosMax;
           const puedeUnirse = mesa.estado === 'esperando' && !llena;
+          const nombres = (mesa.nombresJugadores && mesa.nombresJugadores.length > 0)
+            ? mesa.nombresJugadores.join(', ')
+            : '—';
 
           fila.innerHTML = `
             <td>${mesa.id}</td>
             <td><span class="badge ${mesa.estado}">${mesa.estado}</span></td>
-            <td>${mesa.asientosOcupados} / ${mesa.asientosMax}</td>
+            <td>
+              ${mesa.asientosOcupados} / ${mesa.asientosMax}
+              <div class="nombres-mesa">${nombres}</div>
+            </td>
             <td>$${mesa.apuestaMinima}</td>
             <td><button class="btn-unirse" ${puedeUnirse ? '' : 'disabled'} onclick="unirseAMesa('${mesa.id}')">Unirse</button></td>
           `;
@@ -208,9 +242,9 @@
         });
       } catch (error) {
         console.error('Error cargando mesas:', error);
+        errorMensaje.classList.remove('oculto');
       }
     }
-
     cargarMesas();
     setInterval(cargarMesas, 3000);
   </script>
