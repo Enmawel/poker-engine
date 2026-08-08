@@ -261,6 +261,7 @@ function nuevaMano(partida) {
     partida.fase = 'terminado';
     partida.estado = 'terminado';
     jugadoresEnJuego.forEach(j => notificarPago(partida, j));
+    notificarLobbyActualizado();
     return;
   }
 
@@ -708,6 +709,10 @@ app.get('/partida/:id', (req, res) => {
   res.json({ id, estado: filtrarEstadoParaJugador(partida, idJugadorDelToken) });
 });
 
+function notificarLobbyActualizado() {
+  io.emit('mesasActualizadas');
+}
+
 // Ruta: crear una mesa vacía que espera jugadores reales (para el lobby)
 app.post('/mesa/crear', (req, res) => {
   let asientosMax = Number(req.body.asientosMax) || 6;
@@ -735,6 +740,7 @@ app.post('/mesa/crear', (req, res) => {
   tokensPorPartida[id] = {};
 
   guardarPartida(id);
+  notificarLobbyActualizado();
 
   registrarLog(req.cliente, '/mesa/crear', 200);
   res.json({ id, estado: partidas[id] });
@@ -795,6 +801,7 @@ app.post('/mesa/:id/unirse', (req, res) => {
   }
 
   guardarPartida(id);
+  notificarLobbyActualizado();
   registrarLog(req.cliente, `/mesa/${id}/unirse`, 200);
 
   res.json({
@@ -839,6 +846,7 @@ app.post('/mesa/:id/salir', (req, res) => {
     if (mesa.jugadores.length === 0) {
       delete partidas[id];
       delete tokensPorPartida[id];
+      notificarLobbyActualizado();
       registrarLog(req.cliente, `/mesa/${id}/salir`, 200);
       return res.json({ ok: true, mesaEliminada: true });
     }
@@ -886,6 +894,7 @@ app.post('/mesa/:id/salir', (req, res) => {
 
   delete tokensPorPartida[id][token];
   guardarPartida(id);
+  notificarLobbyActualizado();
 
   registrarLog(req.cliente, `/mesa/${id}/salir`, 200);
   res.json({ ok: true });

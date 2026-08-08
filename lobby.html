@@ -246,7 +246,15 @@
       }
     }
     cargarMesas();
-    setInterval(cargarMesas, 3000);
+    setInterval(cargarMesas, 15000);
+
+    const scriptSocket = document.createElement('script');
+    scriptSocket.src = `${API_URL}/socket.io/socket.io.js`;
+    scriptSocket.onload = () => {
+      const socket = io(API_URL);
+      socket.on('mesasActualizadas', cargarMesas);
+    };
+    document.head.appendChild(scriptSocket);
   </script>
 
 </body>
