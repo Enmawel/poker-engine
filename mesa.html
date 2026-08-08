@@ -1424,6 +1424,10 @@ window.addEventListener('resize', aplicarModoDispositivo);
       const jugadoresEnMesa = estado.jugadores.filter(j => j.enJuego !== false);
       const otrosJugadores = jugadoresEnMesa.filter(j => j.id !== MI_JUGADOR_ID);
 
+      const miJugadorObj = estado.jugadores.find(j => j.id === MI_JUGADOR_ID);
+      const miAsientoReal = miJugadorObj ? miJugadorObj.asiento : undefined;
+      const totalAsientosMesa = estado.asientosMax || estado.jugadores.length;
+
       const jugadoresMapeados = jugadoresEnMesa.map((j) => {
         if (j.id === MI_JUGADOR_ID) {
           return {
@@ -1436,10 +1440,16 @@ window.addEventListener('resize', aplicarModoDispositivo);
             activo: j.activo
           };
         } else {
-          const otroIndex = otrosJugadores.findIndex(o => o.id === j.id);
+          let indiceVisual;
+          if (miAsientoReal !== undefined && j.asiento !== undefined) {
+            const diferencia = ((j.asiento - miAsientoReal) % totalAsientosMesa + totalAsientosMesa) % totalAsientosMesa;
+            indiceVisual = (diferencia - 1) % asientosOtros.length;
+          } else {
+            indiceVisual = otrosJugadores.findIndex(o => o.id === j.id);
+          }
           return {
             id: j.id,
-            asiento: asientosOtros[otroIndex],
+            asiento: asientosOtros[indiceVisual],
             nombre: j.nombre || `Usuario ${j.id}`,
             fichas: j.fichas,
             esTurno: estado.jugadores[estado.turnoActual].id === j.id,
