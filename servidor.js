@@ -1148,6 +1148,10 @@ app.get('/mesas', autenticar, (req, res) => {
   res.json({ mesas });
 });
 
+app.get('/plataforma', autenticar, (req, res) => {
+  res.json({ nombre: `${req.cliente} Poker` });
+});
+
 // Ruta de PRUEBA: simula el endpoint que la casa de apuestas usaría para
 // recibir el aviso de cuántas fichas le quedaron a un jugador al salir.
 app.post('/webhook-test/recibir-pago', (req, res) => {

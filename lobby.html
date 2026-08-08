@@ -133,11 +133,19 @@
     .error-mensaje.oculto {
       display: none;
     }
+    .logo-plataforma {
+      max-width: 320px;
+      width: 100%;
+      height: auto;
+      display: block;
+      margin-bottom: 0.5rem;
+    }
+
   </style>
 </head>
 <body>
 
-  <h1>🃏 Lobby de Mesas</h1>
+  <img src="imagenes/logo-facilitobet.png" alt="Logo" class="logo-plataforma" id="logoPlataforma">
   <p class="subtitulo">Elige una mesa para unirte</p>
 
   <div class="usuario-box">
@@ -203,6 +211,20 @@
         console.error('Error uniéndose a la mesa:', error);
       }
     }
+
+    async function cargarPlataforma() {
+      try {
+        const respuesta = await fetch(`${API_URL}/plataforma`, {
+          headers: { 'x-api-key': API_KEY }
+        });
+        const datos = await respuesta.json();
+        document.title = `Lobby - ${datos.nombre}`;
+      } catch (error) {
+        console.error('Error cargando nombre de la plataforma:', error);
+      }
+    }
+
+    cargarPlataforma();
 
     async function cargarMesas() {
       const errorMensaje = document.getElementById('errorMensaje');

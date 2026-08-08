@@ -142,7 +142,7 @@
 
     .pozo {
       position: absolute;
-      top: 262px;
+      top: 235px;
       left: 50%;
       transform: translate(-50%, -50%);
       color: #ffd700;
@@ -151,7 +151,7 @@
     }
       .texto-siguiente-mano {
        position: absolute;
-       top: 275px;
+       top: 195px;
        left: 50%;
        transform: translate(-50%, 0);
        color: #ffd700;
@@ -167,8 +167,8 @@
     /* --- FICHAS DE CASINO (imágenes reales) --- */
     .ficha-capa, .ficha-viajera {
       position: relative;
-      width: 22px;
-      height: 25px;
+      width: 12px;
+      height: 14px;
       background-size: contain;
       background-repeat: no-repeat;
       background-position: center;
@@ -184,7 +184,7 @@
     .ficha-dorada { background-image: url('imagenes/fichas/ficha-amarilla.png'); }
 
     .ficha-capa {
-      margin-top: -15px;
+      margin-top: -8px;
     }
 
     .ficha-capa:first-child {
@@ -194,7 +194,7 @@
     /* Grupo de varias columnas de fichas, en forma de escalera */
     .grupo-pozo {
       position: absolute;
-      top: 220px;
+      top: 200px;
       left: 50%;
       transform: translate(-50%, -50%);
       display: flex;
@@ -257,7 +257,7 @@
     }
 
     .asiento.principal {
-  transform: translate(-50%, -50%) translateY(-50px);
+  transform: translate(-50%, -50%) translateY(-170px);
 }
 
     .fila-jugador {
@@ -334,6 +334,9 @@
       justify-content: center;
       font-weight: bold;
       box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
     }
 
     .carta.roja { color: #d32f2f; }
@@ -385,6 +388,9 @@
       justify-content: center;
       font-weight: bold;
       font-size: 10px;
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
     }
 
     .carta-mini .carta-dorso-overlay {
@@ -419,7 +425,7 @@
 
     .acciones {
   position: absolute;
-  bottom: 165px;
+  bottom: 55px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -841,6 +847,20 @@
       : 'https://poker-engine-production-0995.up.railway.app';
     const API_KEY = 'pk_facilitobet_x7k2m9q3';
 
+    async function cargarPlataforma() {
+      try {
+        const respuesta = await fetch(`${API_URL}/plataforma`, {
+          headers: { 'x-api-key': API_KEY }
+        });
+        const datos = await respuesta.json();
+        document.title = datos.nombre;
+      } catch (error) {
+        console.error('Error cargando nombre de la plataforma:', error);
+      }
+    }
+
+    cargarPlataforma();
+
     const params = new URLSearchParams(window.location.search);
     let MI_JUGADOR_ID = parseInt(params.get('jugadorId')) || 1;
     let MI_TOKEN = params.get('token') || null;
@@ -885,7 +905,7 @@
     }
 
     function obtenerPosicionPozo() {
-      return esMovil() ? { x: 180, y: 320 } : { x: 400, y: 220 };
+      return esMovil() ? { x: 180, y: 320 } : { x: 400, y: 200 };
     }
 
     function cargarSocketIoYArrancar() {
@@ -1146,13 +1166,17 @@ window.addEventListener('resize', aplicarModoDispositivo);
       const contenedor = document.getElementById(`cartas-jugador-${jugadorMapeado.id}`);
       if (!contenedor) return;
 
+      const esMio = jugadorMapeado.id === MI_JUGADOR_ID;
+
       const radiosAsientos = obtenerRadiosAsientos();
       const posAsiento = posicionAsientoPx(jugadorMapeado.asiento, totalAsientos, radiosAsientos.x, radiosAsientos.y);
+      if (esMio) {
+        posAsiento.y -= 170; // compensa el desplazamiento de la píldora "Tú" hacia arriba
+      }
       const posMazo = obtenerPosicionMazo();
       const dx = posMazo.x - posAsiento.x;
       const dy = posMazo.y - posAsiento.y;
 
-      const esMio = jugadorMapeado.id === MI_JUGADOR_ID;
       const div = document.createElement('div');
 
       if (esMio) {
@@ -1166,9 +1190,7 @@ window.addEventListener('resize', aplicarModoDispositivo);
         const overlay = document.createElement('div');
         overlay.className = 'carta-dorso-overlay';
         div.appendChild(overlay);
-      } else {
-        div.className = 'carta-mini reverso nueva';
-      }
+      } else
 
       div.style.setProperty('--dx', dx + 'px');
       div.style.setProperty('--dy', dy + 'px');
@@ -1242,18 +1264,23 @@ window.addEventListener('resize', aplicarModoDispositivo);
 
       const contenedorPozo = document.getElementById('fichas-pozo');
       contenedorPozo.innerHTML = '';
-      const columnas = [1, 2, 3, 4]; // negra, azul, verde, roja
-      const PALETA_POZO = ['ficha-negra', 'ficha-azul', 'ficha-verde', 'ficha-roja'];
 
-      columnas.forEach((cantidad, indiceColumna) => {
-        const columnaDiv = document.createElement('div');
-        columnaDiv.className = 'columna-fichas';
-        const color = PALETA_POZO[indiceColumna % PALETA_POZO.length];
-        for (let i = 0; i < cantidad; i++) {
-          columnaDiv.appendChild(crearCapaEstatica(color, cantidad - i));
-        }
-        contenedorPozo.appendChild(columnaDiv);
-      });
+      const totalCapas = calcularCapasPozo(estadoOriginal.pozo);
+      if (totalCapas > 0) {
+        const PALETA_POZO = ['ficha-blanca', 'ficha-negra', 'ficha-azul', 'ficha-verde', 'ficha-roja', 'ficha-dorada'];
+        const columnas = distribuirEnEscalera(totalCapas, 6);
+
+        columnas.forEach((cantidad, indiceColumna) => {
+          if (cantidad <= 0) return;
+          const columnaDiv = document.createElement('div');
+          columnaDiv.className = 'columna-fichas';
+          const color = PALETA_POZO[indiceColumna % PALETA_POZO.length];
+          for (let i = 0; i < cantidad; i++) {
+            columnaDiv.appendChild(crearCapaEstatica(color, cantidad - i));
+          }
+          contenedorPozo.appendChild(columnaDiv);
+        });
+      }
 
       fichasPreviasPorId = {};
       estadoOriginal.jugadores.forEach(j => { fichasPreviasPorId[j.id] = j.fichas; });
@@ -1279,7 +1306,6 @@ window.addEventListener('resize', aplicarModoDispositivo);
             <div class="valor-carta">${carta.valor}</div>
             <div class="palo-carta">${carta.palo}</div>
           `;
-
           const esCartaNueva = !primeraCargaCartas && i >= cartasPrevias;
           if (esCartaNueva) {
             const dx = 116 - (58 * i);
@@ -1508,7 +1534,7 @@ window.addEventListener('resize', aplicarModoDispositivo);
               'Content-Type': 'application/json',
               'x-api-key': API_KEY
             },
-            body: JSON.stringify({ jugadores: 3 })
+            body: JSON.stringify({ jugadores: 9, soloParaTesting: true })
           });
           datos = await respuesta.json();
           MI_TOKEN = datos.tokens[MI_JUGADOR_ID];
