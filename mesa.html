@@ -292,6 +292,8 @@
       align-items: center;
       justify-content: center;
       font-size: 16px;
+      font-weight: bold;
+      color: white;
       border: 2px solid rgba(255,255,255,0.3);
       flex-shrink: 0;
     }
@@ -1064,6 +1066,13 @@ window.addEventListener('resize', aplicarModoDispositivo);
       }
     }
 
+    function colorAvatar(nombre) {
+      const PALETA_AVATAR = ['#ef4444', '#f59e0b', '#22c55e', '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
+      let suma = 0;
+      for (let i = 0; i < nombre.length; i++) suma += nombre.charCodeAt(i);
+      return PALETA_AVATAR[suma % PALETA_AVATAR.length];
+    }
+
     function crearAsientos(totalAsientos, estado, sinCartas) {
       const contenedor = document.getElementById('asientos');
       contenedor.innerHTML = '';
@@ -1121,13 +1130,16 @@ window.addEventListener('resize', aplicarModoDispositivo);
             asientoDiv.classList.add('avatar-izquierda');
           }
 
+          const inicial = (jugador.nombreReal || jugador.nombre || '?').trim().charAt(0).toUpperCase();
+          const colorFondo = colorAvatar(jugador.nombreReal || jugador.nombre || '');
+
           asientoDiv.innerHTML = `
             <div class="fila-jugador">
               <div class="info-jugador">
                 <div class="nombre-jugador">${jugador.nombre}</div>
                 <div class="fichas-jugador">$${jugador.fichas}</div>
               </div>
-              <div class="avatar-jugador">👤</div>
+              <div class="avatar-jugador" style="background:${colorFondo}">${inicial}</div>
             </div>
           `;
 
@@ -1460,6 +1472,7 @@ window.addEventListener('resize', aplicarModoDispositivo);
             id: j.id,
             asiento: 2,
             nombre: 'Tú',
+            nombreReal: j.nombre,
             fichas: j.fichas,
             esTurno: estado.jugadores[estado.turnoActual].id === MI_JUGADOR_ID,
             cartas: j.cartas,
