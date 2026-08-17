@@ -75,9 +75,10 @@
   <div class="crear-mesa">
     <h2>Crear mesa nueva</h2>
     <div class="fila">
-      <input type="number" id="inputAsientos" placeholder="Asientos" value="2">
+      <input type="number" id="inputAsientos" placeholder="Asientos" value="9">
       <input type="number" id="inputCiega" placeholder="Ciega grande" value="50">
       <input type="number" id="inputFichas" placeholder="Fichas iniciales" value="1000">
+      <input type="number" id="inputBots" placeholder="Bots" value="8">
       <button onclick="crearMesa()">Crear mesa</button>
     </div>
   </div>
@@ -105,6 +106,7 @@
       const asientosMax = Number(document.getElementById('inputAsientos').value) || 2;
       const apuestaMinima = Number(document.getElementById('inputCiega').value) || 50;
       const fichasIniciales = Number(document.getElementById('inputFichas').value) || 1000;
+      const bots = Number(document.getElementById('inputBots').value) || 0;
 
       try {
         await fetch(`${API_URL}/mesa/crear`, {
@@ -113,7 +115,7 @@
             'Content-Type': 'application/json',
             'x-api-key': API_KEY
           },
-          body: JSON.stringify({ asientosMax, apuestaMinima, fichasIniciales })
+          body: JSON.stringify({ asientosMax, apuestaMinima, fichasIniciales, bots })
         });
         cargarMesas();
       } catch (error) {

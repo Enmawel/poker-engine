@@ -718,12 +718,34 @@ app.post('/mesa/crear', (req, res) => {
   let asientosMax = Number(req.body.asientosMax) || 6;
   let apuestaMinima = Number(req.body.apuestaMinima) || 50;
   let fichasIniciales = Number(req.body.fichasIniciales) || 1000;
+  let bots = Number(req.body.bots) || 0;
 
   asientosMax = Math.min(9, Math.max(2, Math.round(asientosMax)));
   apuestaMinima = Math.min(10000, Math.max(1, Math.round(apuestaMinima)));
   fichasIniciales = Math.min(1000000, Math.max(apuestaMinima * 2, Math.round(fichasIniciales)));
+  bots = Math.min(asientosMax - 1, Math.max(0, Math.round(bots)));
 
   const id = generarId();
+
+  const nombresBots = nombresAleatorios(bots);
+  const jugadoresBots = [];
+  let proximoIdJugador = 0;
+  for (let i = 0; i < bots; i++) {
+    proximoIdJugador++;
+    jugadoresBots.push({
+      id: proximoIdJugador,
+      asiento: i,
+      nombre: nombresBots[i],
+      idUsuarioExterno: null,
+      cartas: [],
+      fichas: fichasIniciales,
+      apuestaActual: 0,
+      totalApostado: 0,
+      activo: true,
+      enJuego: true,
+      esBot: true
+    });
+  }
 
   partidas[id] = {
     id,
@@ -733,8 +755,8 @@ app.post('/mesa/crear', (req, res) => {
     apuestaMinima,
     apuestaMaxima: null,
     fichasIniciales,
-    jugadores: [],
-    proximoIdJugador: 0,
+    jugadores: jugadoresBots,
+    proximoIdJugador,
     fase: null
   };
   tokensPorPartida[id] = {};
@@ -902,6 +924,20 @@ app.post('/mesa/:id/salir', (req, res) => {
   emitirEstadoPersonalizado(id);
 });
 
+const NOMBRES_BOTS = [
+  'Carlos', 'Miguel', 'Jose', 'Luis', 'Pedro', 'Diego', 'Andres', 'Fernando',
+  'Ricardo', 'Sergio', 'Manuel', 'Alejandro', 'Rafael', 'Eduardo', 'Gabriel', 'Antonio'
+];
+
+function nombresAleatorios(cantidad) {
+  const copia = [...NOMBRES_BOTS];
+  for (let i = copia.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copia[i], copia[j]] = [copia[j], copia[i]];
+  }
+  return copia.slice(0, cantidad);
+}
+
 // Ruta: crear una nueva partida con estado persistente
 app.post('/partida/nueva', (req, res) => {
   const numJugadores = req.body.jugadores || 3;
@@ -913,8 +949,12 @@ app.post('/partida/nueva', (req, res) => {
   const mazoRestante = mazo.slice(numJugadores * 2);
   const tablero = repartirTablero(mazoRestante);
 
+  const nombresBots = nombresAleatorios(numJugadores - 1);
+  let indiceNombreBot = 0;
+
   const jugadores = manos.map((cartas, index) => ({
     id: index + 1,
+    nombre: (soloParaTesting && index !== 0) ? nombresBots[indiceNombreBot++] : undefined,
     cartas: cartas,
     fichas: 1000,
     apuestaActual: 0,
@@ -1138,7 +1178,7 @@ app.get('/mesas', autenticar, (req, res) => {
     .map(p => ({
       id: p.id,
       estado: p.estado,
-      asientosOcupados: p.jugadores.length,
+      asientosOcupados: p.jugadores.filter(j => j.enJuego !== false).length,
       asientosMax: p.asientosMax,
       apuestaMinima: p.apuestaMinima,
       nombresJugadores: p.jugadores.filter(j => j.enJuego !== false).map(j => j.nombre)
