@@ -21,7 +21,7 @@
       margin-bottom:2rem;
     }
     .crear-mesa h2 { font-size:1.1rem; margin-bottom:1rem; }
-    .crear-mesa .fila { display:flex; gap:10px; margin-bottom:10px; flex-wrap:wrap; }
+    .crear-mesa .fila { display:flex; gap:10px; margin-bottom:10px; flex-wrap:wrap; align-items: flex-end; }
     .crear-mesa input {
       background:#0f1117;
       border:1px solid #2a2d3a;
@@ -30,6 +30,15 @@
       border-radius:8px;
       font-size:14px;
       width:160px;
+    }
+     .crear-mesa .campo {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .crear-mesa .campo label {
+      font-size: 12px;
+      color: #a1a1aa;
     }
     .crear-mesa button {
       background:#2d6a4f;
@@ -74,11 +83,30 @@
 
   <div class="crear-mesa">
     <h2>Crear mesa nueva</h2>
-    <div class="fila">
-      <input type="number" id="inputAsientos" placeholder="Asientos" value="9">
-      <input type="number" id="inputCiega" placeholder="Ciega grande" value="50">
-      <input type="number" id="inputFichas" placeholder="Fichas iniciales" value="1000">
-      <input type="number" id="inputBots" placeholder="Bots" value="8">
+        <div class="fila">
+      <div class="campo">
+        <label for="inputAsientos">Asientos</label>
+        <input type="number" id="inputAsientos" value="9">
+      </div>
+      <div class="campo">
+        <label for="inputCiega">Ciega grande</label>
+        <input type="number" id="inputCiega" value="50">
+      </div>
+      <div class="campo">
+        <label for="inputFichas">Fichas iniciales</label>
+        <input type="number" id="inputFichas" value="1000">
+      </div>
+      <div class="campo">
+        <label for="inputBots">Bots</label>
+        <input type="number" id="inputBots" value="8">
+      </div>
+      <div class="campo">
+        <label for="inputMoneda">Moneda</label>
+        <select id="inputMoneda">
+          <option value="USD">USD ($)</option>
+          <option value="VES">VES (Bs.)</option>
+        </select>
+      </div>
       <button onclick="crearMesa()">Crear mesa</button>
     </div>
   </div>
@@ -90,6 +118,8 @@
         <th>Estado</th>
         <th>Jugadores</th>
         <th>Ciega grande</th>
+        <th>Moneda</th>
+        <th></th>
       </tr>
     </thead>
     <tbody id="tablaMesas"></tbody>
@@ -102,11 +132,12 @@
       : 'https://poker-engine-production-0995.up.railway.app';
     const API_KEY = 'pk_facilitobet_x7k2m9q3';
 
-    async function crearMesa() {
+      async function crearMesa() {
       const asientosMax = Number(document.getElementById('inputAsientos').value) || 2;
       const apuestaMinima = Number(document.getElementById('inputCiega').value) || 50;
       const fichasIniciales = Number(document.getElementById('inputFichas').value) || 1000;
       const bots = Number(document.getElementById('inputBots').value) || 0;
+      const moneda = document.getElementById('inputMoneda').value;
 
       try {
         await fetch(`${API_URL}/mesa/crear`, {
@@ -115,7 +146,7 @@
             'Content-Type': 'application/json',
             'x-api-key': API_KEY
           },
-          body: JSON.stringify({ asientosMax, apuestaMinima, fichasIniciales, bots })
+          body: JSON.stringify({ asientosMax, apuestaMinima, fichasIniciales, bots, moneda })
         });
         cargarMesas();
       } catch (error) {
@@ -123,7 +154,7 @@
       }
     }
 
-    async function cargarMesas() {
+        async function cargarMesas() {
       try {
         const respuesta = await fetch(`${API_URL}/mesas`, {
           headers: { 'x-api-key': API_KEY }
@@ -133,24 +164,118 @@
         const tabla = document.getElementById('tablaMesas');
         tabla.innerHTML = '';
 
+        const selectMesas = document.getElementById('selectMesaJugadores');
+        const valorPrevio = selectMesas.value;
+        selectMesas.innerHTML = '<option value="">-- elige una mesa --</option>';
+
         datos.mesas.forEach(mesa => {
+          const simbolo = mesa.moneda === 'VES' ? 'Bs.' : '$';
           const fila = document.createElement('tr');
+          const botonIniciar = mesa.estado === 'esperando'
+            ? `<button onclick="iniciarMesa('${mesa.id}')">Iniciar ahora</button>`
+            : '';
           fila.innerHTML = `
             <td>${mesa.id}</td>
             <td><span class="badge ${mesa.estado}">${mesa.estado}</span></td>
             <td>${mesa.asientosOcupados} / ${mesa.asientosMax}</td>
-            <td>$${mesa.apuestaMinima}</td>
+            <td>${simbolo} ${mesa.apuestaMinima}</td>
+            <td>${mesa.moneda || 'USD'}</td>
+            <td>${botonIniciar}</td>
+          `;
+          tabla.appendChild(fila);
+
+          const opcion = document.createElement('option');
+          opcion.value = mesa.id;
+          opcion.textContent = `${mesa.id} (${mesa.estado}, ${mesa.asientosOcupados}/${mesa.asientosMax})`;
+          selectMesas.appendChild(opcion);
+        });
+
+        selectMesas.value = valorPrevio;
+      } catch (error) {
+        console.error('Error cargando mesas:', error);
+      }
+    }
+
+        async function cargarJugadoresMesa() {
+      const mesaId = document.getElementById('selectMesaJugadores').value;
+      if (!mesaId) return;
+
+      try {
+        const respuesta = await fetch(`${API_URL}/admin/mesa/${mesaId}/jugadores`, {
+          headers: { 'x-api-key': API_KEY }
+        });
+        const datos = await respuesta.json();
+
+        const tabla = document.getElementById('tablaJugadoresMesa');
+        tabla.innerHTML = '';
+
+        datos.jugadores.forEach(jugador => {
+          const fila = document.createElement('tr');
+          fila.innerHTML = `
+            <td>${jugador.nombre || ('Jugador ' + jugador.id)}${jugador.esBot ? ' (bot)' : ''}</td>
+            <td>${jugador.fichas}</td>
+            <td><input type="number" id="fichas-${jugador.id}" value="${jugador.fichas}" style="width:100px;"></td>
+            <td><button onclick="guardarFichasJugador('${mesaId}', ${jugador.id})">Guardar</button></td>
           `;
           tabla.appendChild(fila);
         });
       } catch (error) {
-        console.error('Error cargando mesas:', error);
+        console.error('Error cargando jugadores:', error);
+      }
+    }
+
+        async function iniciarMesa(id) {
+      if (!confirm('¿Arrancar esta mesa ahora, aunque no esté llena?')) return;
+      try {
+        await fetch(`${API_URL}/mesa/${id}/iniciar`, {
+          method: 'POST',
+          headers: { 'x-api-key': API_KEY }
+        });
+        cargarMesas();
+      } catch (error) {
+        console.error('Error iniciando mesa:', error);
+      }
+    }
+
+    async function guardarFichasJugador(mesaId, jugadorId) {
+      const nuevoMonto = Number(document.getElementById(`fichas-${jugadorId}`).value);
+      try {
+        await fetch(`${API_URL}/admin/mesa/${mesaId}/jugador/${jugadorId}/fichas`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': API_KEY
+          },
+          body: JSON.stringify({ fichas: nuevoMonto })
+        });
+        cargarJugadoresMesa();
+      } catch (error) {
+        console.error('Error actualizando fichas:', error);
       }
     }
 
     cargarMesas();
     setInterval(cargarMesas, 3000);
   </script>
+
+    <div class="crear-mesa" style="margin-top:2rem;">
+    <h2>Ajustar fichas de jugadores</h2>
+    <div class="fila">
+      <select id="selectMesaJugadores"></select>
+      <button onclick="cargarJugadoresMesa()">Cargar jugadores</button>
+    </div>
+    <table style="margin-top:1rem;">
+      <thead>
+        <tr>
+          <th>Jugador</th>
+          <th>Fichas actuales</th>
+          <th>Nuevo monto</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="tablaJugadoresMesa"></tbody>
+    </table>
+  </div>
 
 </body>
 </html>

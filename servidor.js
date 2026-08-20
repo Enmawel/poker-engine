@@ -719,6 +719,7 @@ app.post('/mesa/crear', (req, res) => {
   let apuestaMinima = Number(req.body.apuestaMinima) || 50;
   let fichasIniciales = Number(req.body.fichasIniciales) || 1000;
   let bots = Number(req.body.bots) || 0;
+  const moneda = req.body.moneda === 'VES' ? 'VES' : 'USD';
 
   asientosMax = Math.min(9, Math.max(2, Math.round(asientosMax)));
   apuestaMinima = Math.min(10000, Math.max(1, Math.round(apuestaMinima)));
@@ -750,6 +751,7 @@ app.post('/mesa/crear', (req, res) => {
   partidas[id] = {
     id,
     cliente: req.cliente,
+    moneda,
     estado: 'esperando',
     asientosMax,
     apuestaMinima,
@@ -839,6 +841,33 @@ app.post('/mesa/:id/unirse', (req, res) => {
   if (mesaLlena) {
     emitirEstadoPersonalizado(id);
   }
+});
+
+// Ruta admin: arrancar una mesa manualmente sin esperar a que se llene
+app.post('/mesa/:id/iniciar', autenticar, (req, res) => {
+  const { id } = req.params;
+  const mesa = partidas[id];
+  if (!mesa) {
+    return res.status(404).json({ error: 'Mesa no encontrada' });
+  }
+  if (mesa.estado !== 'esperando') {
+    return res.status(400).json({ error: 'Esta mesa ya está en juego o terminada' });
+  }
+  if (mesa.jugadores.length < 2) {
+    return res.status(400).json({ error: 'Se necesitan al menos 2 jugadores para arrancar' });
+  }
+
+  mesa.indiceDealer = mesa.jugadores.length - 1;
+  mesa.estado = 'jugando';
+  nuevaMano(mesa);
+  procesarTurnosBot(id);
+
+  guardarPartida(id);
+  notificarLobbyActualizado();
+  registrarLog(req.cliente, `/mesa/${id}/iniciar`, 200);
+  res.json({ ok: true });
+
+  emitirEstadoPersonalizado(id);
 });
 
 // Ruta: abandonar una mesa (se levanta si está esperando, o se retira de la mano si ya está en curso)
@@ -1179,6 +1208,7 @@ app.get('/mesas', autenticar, (req, res) => {
       id: p.id,
       estado: p.estado,
       asientosOcupados: p.jugadores.filter(j => j.enJuego !== false).length,
+      moneda: p.moneda || 'USD',
       asientosMax: p.asientosMax,
       apuestaMinima: p.apuestaMinima,
       nombresJugadores: p.jugadores.filter(j => j.enJuego !== false).map(j => j.nombre)
@@ -1190,6 +1220,45 @@ app.get('/mesas', autenticar, (req, res) => {
 
 app.get('/plataforma', autenticar, (req, res) => {
   res.json({ nombre: `${req.cliente} Poker` });
+});
+
+// Ruta admin: ver los jugadores de una mesa con sus fichas (incluye bots)
+app.get('/admin/mesa/:id/jugadores', autenticar, (req, res) => {
+  const mesa = partidas[req.params.id];
+  if (!mesa) {
+    return res.status(404).json({ error: 'Mesa no encontrada' });
+  }
+  const jugadores = mesa.jugadores.map(j => ({
+    id: j.id,
+    nombre: j.nombre,
+    fichas: j.fichas,
+    esBot: j.esBot,
+    enJuego: j.enJuego !== false
+  }));
+  res.json({ jugadores });
+});
+
+// Ruta admin: ajustar manualmente las fichas de un jugador
+app.post('/admin/mesa/:id/jugador/:jugadorId/fichas', autenticar, (req, res) => {
+  const mesa = partidas[req.params.id];
+  if (!mesa) {
+    return res.status(404).json({ error: 'Mesa no encontrada' });
+  }
+  const jugadorId = Number(req.params.jugadorId);
+  const jugador = mesa.jugadores.find(j => j.id === jugadorId);
+  if (!jugador) {
+    return res.status(404).json({ error: 'Jugador no encontrado' });
+  }
+  const nuevoMonto = Number(req.body.fichas);
+  if (!Number.isFinite(nuevoMonto) || nuevoMonto < 0) {
+    return res.status(400).json({ error: 'Monto inválido' });
+  }
+  jugador.fichas = nuevoMonto;
+  guardarPartida(req.params.id);
+  notificarLobbyActualizado();
+  emitirEstadoPersonalizado(req.params.id);
+  registrarLog(req.cliente, `/admin/mesa/${req.params.id}/jugador/${jugadorId}/fichas`, 200);
+  res.json({ ok: true, jugador: { id: jugador.id, fichas: jugador.fichas } });
 });
 
 // Ruta de PRUEBA: simula el endpoint que la casa de apuestas usaría para

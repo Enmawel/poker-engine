@@ -257,7 +257,7 @@
               ${mesa.asientosOcupados} / ${mesa.asientosMax}
               <div class="nombres-mesa">${nombres}</div>
             </td>
-            <td>$${mesa.apuestaMinima}</td>
+            <td>${mesa.moneda === 'VES' ? 'Bs.' : '$'} ${mesa.apuestaMinima}</td>
             <td><button class="btn-unirse" ${puedeUnirse ? '' : 'disabled'} onclick="unirseAMesa('${mesa.id}')">Unirse</button></td>
           `;
           tabla.appendChild(fila);

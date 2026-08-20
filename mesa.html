@@ -919,7 +919,8 @@
     let MI_JUGADOR_ID = parseInt(params.get('jugadorId')) || 1;
     let MI_TOKEN = params.get('token') || null;
     const mesaIdParam = params.get('mesaId') || null;
-
+    
+    let monedaActual = 'USD';
     let socket = null;
     let partidaId = null;
     let showdownMostrado = false;
@@ -1126,6 +1127,10 @@ window.addEventListener('resize', aplicarModoDispositivo);
       for (let i = 0; i < nombre.length; i++) suma += nombre.charCodeAt(i);
       return PALETA_AVATAR[suma % PALETA_AVATAR.length];
     }
+    
+        function formatearMonto(monto) {
+      return monedaActual === 'VES' ? `Bs. ${monto}` : `$${monto}`;
+    }
 
     function crearAsientos(totalAsientos, estado, sinCartas) {
       const contenedor = document.getElementById('asientos');
@@ -1191,7 +1196,7 @@ window.addEventListener('resize', aplicarModoDispositivo);
             <div class="fila-jugador">
               <div class="info-jugador">
                 <div class="nombre-jugador">${jugador.nombre}</div>
-                <div class="fichas-jugador">$${jugador.fichas}</div>
+                <div class="fichas-jugador">${formatearMonto(jugador.fichas)}</div>
               </div>
               <div class="avatar-jugador" style="background:${colorFondo}">${inicial}</div>
             </div>
@@ -1356,7 +1361,7 @@ window.addEventListener('resize', aplicarModoDispositivo);
     }
 
     function actualizarPozo(monto) {
-      document.querySelector('.pozo').textContent = `Pozo: $${monto}`;
+     document.querySelector('.pozo').textContent = `Pozo: ${formatearMonto(monto)}`;
     }
 
     function renderCartasComunitarias(cartas) {
@@ -1442,7 +1447,7 @@ window.addEventListener('resize', aplicarModoDispositivo);
       const btnCheckCall = document.getElementById('btn-check-call');
       const faltante = estado.apuestaRonda - miJugador.apuestaActual;
 
-      btnCheckCall.textContent = faltante > 0 ? `Igualar $${faltante}` : 'Pasar';
+      btnCheckCall.textContent = faltante > 0 ? `Igualar ${formatearMonto(faltante)}` : 'Pasar';
 
       const controlesApuesta = document.getElementById('controles-apuesta');
 
@@ -1478,8 +1483,8 @@ window.addEventListener('resize', aplicarModoDispositivo);
       const porcentaje = max > min ? ((valor - min) / (max - min)) * 100 : 0;
       slider.style.background = `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${porcentaje}%, rgba(255,255,255,0.3) ${porcentaje}%, rgba(255,255,255,0.3) 100%)`;
 
-      document.getElementById('monto-elegido').textContent = `$${valor}`;
-      document.getElementById('btn-subir').textContent = esAllIn ? 'Subir (All-in)' : `Subir $${valor}`;
+      document.getElementById('monto-elegido').textContent = formatearMonto(valor);
+      document.getElementById('btn-subir').textContent = esAllIn ? 'Subir (All-in)' : `Subir ${formatearMonto(valor)}`;
     }
 
     function mostrarSalaDeEspera(estado) {
@@ -1510,6 +1515,10 @@ window.addEventListener('resize', aplicarModoDispositivo);
       ultimoEstado = estado;
       if (estado.tuJugadorId) {
         MI_JUGADOR_ID = estado.tuJugadorId;
+      }
+
+       if (estado.moneda) {
+        monedaActual = estado.moneda;
       }
 
       if (estado.estado === 'esperando') {
@@ -1715,8 +1724,8 @@ window.addEventListener('resize', aplicarModoDispositivo);
       if (listaBotes.length > 1) {
         const titulo = document.createElement('p');
         titulo.className = 'titulo-bote';
-        titulo.textContent = (index === 0 ? 'Bote principal' : `Bote lateral ${index}`) +
-          (bote.monto ? ` — $${bote.monto}` : '');
+          titulo.textContent = (index === 0 ? 'Bote principal' : `Bote lateral ${index}`) +
+          (bote.monto ? ` — ${formatearMonto(bote.monto)}` : '');
         bloque.appendChild(titulo);
 
         const nombres = document.createElement('p');
