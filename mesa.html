@@ -45,13 +45,18 @@
     .mesa.movil .grupo-pozo {
       top: 330px;
     }
+
+    .mesa.movil .asiento.principal {
+      transform: translate(-50%, -50%) translateY(-130px);
+    }
+
     .mesa.movil .pozo {
       top: 360px;
     }
 
     .acciones.movil {
-      position: fixed;
-      bottom: 200px;
+      position: absolute;
+      bottom: -20px;
       left: 50%;
       transform: translateX(-50%);
       width: 90vw;
@@ -63,8 +68,10 @@
       margin-left: -10px;
     }
 
-    .mesa.movil .avatar-izquierda .fila-jugador {
+        .mesa.movil .avatar-izquierda .contenido-jugador {
       flex-direction: row-reverse;
+    }
+    .mesa.movil .avatar-izquierda .fila-jugador {
       padding: 3px 16px 3px 3px;
     }
 
@@ -265,17 +272,20 @@
   transform: translate(-50%, -50%) translateY(-170px);
 }
 
-    .fila-jugador {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
+        .fila-jugador {
       background: rgba(15,15,15,0.85);
       border-radius: 999px;
       padding: 3px 3px 3px 16px;
       border: 2px solid rgba(255,255,255,0.15);
       white-space: nowrap;
       min-width: 130px;
+    }
+
+    .contenido-jugador {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
     }
 
     .asiento.turno .fila-jugador {
@@ -1192,13 +1202,19 @@ window.addEventListener('resize', aplicarModoDispositivo);
           const inicial = (jugador.nombreReal || jugador.nombre || '?').trim().charAt(0).toUpperCase();
           const colorFondo = colorAvatar(jugador.nombreReal || jugador.nombre || '');
 
+          const desplazamientoContenido = (esMovil() && i !== estado.miAsiento)
+             ? (xFinal < centroX ? -0 : (xFinal > centroX ? 0 : 0))
+            : 0;
+
           asientoDiv.innerHTML = `
             <div class="fila-jugador">
-              <div class="info-jugador">
-                <div class="nombre-jugador">${jugador.nombre}</div>
-                <div class="fichas-jugador">${formatearMonto(jugador.fichas)}</div>
+              <div class="contenido-jugador" style="transform: translateX(${desplazamientoContenido}px);">
+                <div class="info-jugador">
+                  <div class="nombre-jugador">${jugador.nombre}</div>
+                  <div class="fichas-jugador">${formatearMonto(jugador.fichas)}</div>
+                </div>
+                <div class="avatar-jugador" style="background:${colorFondo}">${inicial}</div>
               </div>
-              <div class="avatar-jugador" style="background:${colorFondo}">${inicial}</div>
             </div>
           `;
 
@@ -1220,6 +1236,14 @@ window.addEventListener('resize', aplicarModoDispositivo);
               }
             });
           }
+
+          if (esMovil() && i !== estado.miAsiento) {
+          if (xFinal < centroX) {
+            xFinal -= 20;
+          } else if (xFinal > centroX) {
+            xFinal += 20;
+          }
+        }
 
           asientoDiv.prepend(contenedorCartas);
           contenedor.appendChild(asientoDiv);
@@ -1704,14 +1728,18 @@ window.addEventListener('resize', aplicarModoDispositivo);
       ? estado.ganadores
       : [{ monto: null, evaluacion: estado.ganador.evaluacion, ganadores: [estado.ganador.jugador] }];
 
-    const nombreJugador = id => id === MI_JUGADOR_ID ? 'Tú' : `Usuario ${id}`;
+    const nombreJugador = id => {
+      if (id === MI_JUGADOR_ID) return 'Tú';
+      const jugador = estado.jugadores.find(j => j.id === id);
+      return jugador ? jugador.nombre : `Jugador ${id}`;
+    };
     const todosLosIds = listaBotes.flatMap(bote => bote.ganadores);
     const yoGane = todosLosIds.includes(MI_JUGADOR_ID);
 
     document.getElementById('texto-ganador').textContent = yoGane
       ? '🏆 ¡Ganaste!'
       : (listaBotes.length === 1 && listaBotes[0].ganadores.length === 1
-          ? `Ganó el ${nombreJugador(listaBotes[0].ganadores[0])}`
+          ? `Ganó ${nombreJugador(listaBotes[0].ganadores[0])}`
           : 'Resultado de la mano');
 
     const contenedor = document.getElementById('resultados-botes');
