@@ -120,6 +120,7 @@
         <th>Ciega grande</th>
         <th>Moneda</th>
         <th></th>
+        <th></th>
       </tr>
     </thead>
     <tbody id="tablaMesas"></tbody>
@@ -174,13 +175,14 @@
           const botonIniciar = mesa.estado === 'esperando'
             ? `<button onclick="iniciarMesa('${mesa.id}')">Iniciar ahora</button>`
             : '';
-          fila.innerHTML = `
+        fila.innerHTML = `
             <td>${mesa.id}</td>
             <td><span class="badge ${mesa.estado}">${mesa.estado}</span></td>
             <td>${mesa.asientosOcupados} / ${mesa.asientosMax}</td>
             <td>${simbolo} ${mesa.apuestaMinima}</td>
             <td>${mesa.moneda || 'USD'}</td>
             <td>${botonIniciar}</td>
+            <td><button onclick="borrarMesa('${mesa.id}')">Borrar</button></td>
           `;
           tabla.appendChild(fila);
 
@@ -234,6 +236,19 @@
         cargarMesas();
       } catch (error) {
         console.error('Error iniciando mesa:', error);
+      }
+    }
+
+        async function borrarMesa(id) {
+      if (!confirm('¿Seguro que quieres borrar esta mesa? Esto no se puede deshacer.')) return;
+      try {
+        await fetch(`${API_URL}/admin/mesa/${id}/eliminar`, {
+          method: 'POST',
+          headers: { 'x-api-key': API_KEY }
+        });
+        cargarMesas();
+      } catch (error) {
+        console.error('Error borrando mesa:', error);
       }
     }
 

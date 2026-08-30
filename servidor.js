@@ -1261,6 +1261,26 @@ app.post('/admin/mesa/:id/jugador/:jugadorId/fichas', autenticar, (req, res) => 
   res.json({ ok: true, jugador: { id: jugador.id, fichas: jugador.fichas } });
 });
 
+// Ruta admin: borrar una mesa por completo (memoria y base de datos)
+app.post('/admin/mesa/:id/eliminar', autenticar, async (req, res) => {
+  const { id } = req.params;
+  if (!partidas[id]) {
+    return res.status(404).json({ error: 'Mesa no encontrada' });
+  }
+  delete partidas[id];
+  delete tokensPorPartida[id];
+
+  try {
+    await pool.query('DELETE FROM partidas WHERE id = $1', [id]);
+  } catch (error) {
+    console.error('Error eliminando mesa de la BD:', error.message);
+  }
+
+  notificarLobbyActualizado();
+  registrarLog(req.cliente, `/admin/mesa/${id}/eliminar`, 200);
+  res.json({ ok: true });
+});
+
 // Ruta de PRUEBA: simula el endpoint que la casa de apuestas usaría para
 // recibir el aviso de cuántas fichas le quedaron a un jugador al salir.
 app.post('/webhook-test/recibir-pago', (req, res) => {
